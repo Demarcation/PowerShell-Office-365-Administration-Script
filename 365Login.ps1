@@ -418,7 +418,7 @@ function global:fAddNewUser {
 		$xSKU = Get-MsolAccountSku | where-object { $_.AccountSkuId -eq $xLic } 
 		
 		if ($xSKU.ConsumedUnits -le $xSKU.ActiveUnits) {
-			New-MsolUser -DisplayName $xDisplayName -FirstName $xFirstName -LastName $xLastName -UserPrincipalName $xUPN -LicenseAssignment $xLic -UsageLocation GB -PreferredLanguage "en-GB" –Password $xPass -ForceChangePassword $False
+			New-MsolUser -DisplayName $xDisplayName -FirstName $xFirstName -LastName $xLastName -UserPrincipalName $xUPN -LicenseAssignment $xLic -Password $xPass -UsageLocation GB -PreferredLanguage "en-GB" -ForceChangePassword $False
 			return
 		} else {
 			fDisplayInfo -xText "You Do Not currently have enough Licenses to proceed." -xText2 "Please Login to Office 365 and purchase more licences" -xText3 "before proceeding." -xTime 5
