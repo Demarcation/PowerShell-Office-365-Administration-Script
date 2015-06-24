@@ -33,7 +33,6 @@ function global:start-login{
 			Invoke-WebRequest $source -OutFile $destination
 			Import-Module $destination
 	}
-
 	Import-Module MSOnline
 	fclear-login
 	cls
@@ -224,7 +223,9 @@ function global:Use-Admin {
 										"Discover Licence Names"="fGetMsolAccountSku"
 										"Add New User"="fAddNewUser"}
 			"Mailboxes"=@{				"Add User to Mailbox Folder"="fAddMailboxFolderPerm"
-										"Remove User from Mailbox Folder"="fRemoveMailboxFolderPerm"}
+										"Remove User from Mailbox Folder"="fRemoveMailboxFolderPerm"
+										"Grant Full Access to Mailbox"="fGrantFullAccessMailbox"
+										"Remove Full Access to Mailbox"="fRemoveFullAccessMailbox"}
 			"Dist Groups"=@{			"List all Dist Groups and Members"="fListDistMembers"
 										"Add User to Dist Group"="fadduserdistgroup"
 										"Remove User from Dist Group" = "fremoveuserdistgroup"}
@@ -426,6 +427,34 @@ function global:fAddNewUser {
 	fAddNewUserLicCheck
 	
 }
+
+function global:fGrantFullAccessMailbox {
+
+	$xUser = fUserPrompt -xQuestion "Enter the User who would like the access"
+	$xMailbox = fUserPrompt -xQuestion "Enter the Mailbox they would like access to"
+	$xAutoMapYN = fUserPrompt -xQuestion "Would you like to enable AutoMapping? (y/n)"
+	if ($xAutoMapYN -eq "y") {
+		$xAutoMap = $true
+	}elseif ($xAutoMapYN -eq "n") {
+		$xAutoMap = $false
+	}else{
+		#Default
+		$xAutoMap = $true
+	}
+	
+	Add-MailboxPermission -identity $xMailbox -User $xUser -AccessRight fullaccess -InheritanceType all -Automapping $xAutoMap
+	Get-MailboxPermission -identity $xMailbox
+}
+
+function global:fRemoveFullAccessMailbox {
+
+	$xUser = fUserPrompt -xQuestion "Enter the User who no longer requires the access"
+	$xMailbox = fUserPrompt -xQuestion "Enter the Mailbox they no longer need"
+	
+	Remove-MailboxPermission -identity $xMailbox -User $xUser -AccessRight fullaccess
+	Get-MailboxPermission -identity $xMailbox
+}
+
 
 
 # Other functions
