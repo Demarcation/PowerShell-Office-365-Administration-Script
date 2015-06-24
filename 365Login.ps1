@@ -25,29 +25,19 @@
 
 
 function global:start-login{
-#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
+	#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
 
-if (get-module -name MenuSystem){}else{
-	if (Test-Path c:\powershell\MenuSystem.psm1) {
-		Import-Module c:\powershell\MenuSystem.psm1
-	}elseif (test-path Z:\~Tools\Powershell\MenuSystem.psm1) {
-		Import-Module Z:\~Tools\Powershell\MenuSystem.psm1
-	}else{
-		$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
-		if (test-path c:\powershell\) {
-			$destination = "c:\powershell\MenuSystem.psm1"
-		}else{
-			$destination = "Z:\~Tools\Powershell\MenuSystem.psm1"
-		}
-		Invoke-WebRequest $source -OutFile $destination
-		Import-Module $destination
+	if (get-module -name MenuSystem){}else{
+			$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
+			$destination = ".\MenuSystem.psm1"
+			Invoke-WebRequest $source -OutFile $destination
+			Import-Module $destination
 	}
-}
 
-Import-Module MSOnline
-fclear-login
-cls
-fLoginMenu
+	Import-Module MSOnline
+	fclear-login
+	cls
+	fLoginMenu
 }
 
 function global:fLoginMenu{
@@ -134,11 +124,13 @@ PARAM(
 }
 
 function global:fcreate-sstring{
+
 PARAM(
 [STRING[]]$text = "Test String"
 )
-$text | ConvertTo-SecureString -AsPlainText -Force | ConvertFrom-SecureString
-return
+	$text | ConvertTo-SecureString -AsPlainText -Force | ConvertFrom-SecureString
+	return
+	
 }	
 
 function global:fclear-login {
@@ -151,7 +143,7 @@ function global:fclear-login {
     }
 	
 function global:clear-passwords{
-Remove-item C:\O365\* -confirm
+	Remove-item C:\O365\* -confirm
 }	
 
 function global:qqq{start-login}
@@ -182,7 +174,7 @@ $xPrompt = "=>"
 	Write-Host
 	[string]$xAnswer = Read-Host $xPrompt
 	Write-Host
-Return $xAnswer
+	Return $xAnswer
 }
 
 function global:fDisplayInfo {
