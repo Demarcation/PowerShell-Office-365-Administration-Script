@@ -19,18 +19,28 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 	######################################################################
 	Known Bugs:
-	- Cannot accept company names with space - Cause:  $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
+	- Cannot accept company names with space - Cause: Line 61 $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
 	- Cannot Switch company by re-running qqq
 	######################################################################>
 
 
 function global:start-login{
 #This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
+
 if (get-module -name MenuSystem){}else{
 	if (Test-Path c:\powershell\MenuSystem.psm1) {
 		Import-Module c:\powershell\MenuSystem.psm1
-	}else{
+	}elseif (test-path Z:\~Tools\Powershell\MenuSystem.psm1) {
 		Import-Module Z:\~Tools\Powershell\MenuSystem.psm1
+	}else{
+		$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
+		if (test-path c:\powershell\) {
+			$destination = "c:\powershell\MenuSystem.psm1"
+		}else{
+			$destination = "Z:\~Tools\Powershell\MenuSystem.psm1"
+		}
+		Invoke-WebRequest $source -OutFile $destination
+		Import-Module $destination
 	}
 }
 
@@ -397,17 +407,18 @@ function global:fAddNewUser {
 			$xLicMenu.add($_.AccountSkuId,"write-output "+$_.AccountSkuId)
 		}
 	$xLic  = use-menu -MenuHash $xLicMenu -Title "Select a Licence" -NoSplash 1
-	
+		
 	$xPass = fUserPrompt -xQuestion "Password"
-	
+
 	$xDisplayName = $xFirstName+" "+$xLastname
 	
 	Cls
 	
 	function fAddNewUserLicCheck {
 		$xSKU = Get-MsolAccountSku | where-object { $_.AccountSkuId -eq $xLic } 
-		if ($xSku.ConsumedUnits -le $SkuActiveUnits) {
-			New-MsolUser -DisplayName $xDisplayName -FirstName $xFirstName -LastName $xLastName -UserPrincipalName $xUPN	-LicenseAssignment $xLic -UsageLocation GB -PreferredLanguage "en-GB" –Password $xPass -ForceChangePassword $False
+		
+		if ($xSKU.ConsumedUnits -le $xSKU.ActiveUnits) {
+			New-MsolUser -DisplayName $xDisplayName -FirstName $xFirstName -LastName $xLastName -UserPrincipalName $xUPN -LicenseAssignment $xLic -UsageLocation GB -PreferredLanguage "en-GB" –Password $xPass -ForceChangePassword $False
 			return
 		} else {
 			fDisplayInfo -xText "You Do Not currently have enough Licenses to proceed." -xText2 "Please Login to Office 365 and purchase more licences" -xText3 "before proceeding." -xTime 5
@@ -428,10 +439,5 @@ function global:fAddNewUser {
 # Other functions
 
 function global:fExperimentalFunction{
-
-
-
-
-
 
 }
