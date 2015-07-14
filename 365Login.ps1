@@ -38,6 +38,10 @@ function global:start-login{
 			Import-Module $destination
 	}
 	Import-Module MSOnline
+		if (get-module -name MSOnline) {} else {
+		fDisplayInfo -xText "MS Online Module not avalible, unable to contuinue" -xColor "red" -xTime 3
+		Return $false
+	}
 	fclear-login
 	cls
 	fLoginMenu
