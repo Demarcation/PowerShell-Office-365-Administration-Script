@@ -5,32 +5,28 @@
 		It is requested that you leave this notice in place when using the
 		Menu System.
 
-		This program is free software: you can redistribute it and/or modify
-		it under the terms of the GNU General Public License as published by
-		the Free Software Foundation, either version 3 of the License, or
-		the latest version.
-
-		This program is distributed in the hope that it will be useful,
-		but WITHOUT ANY WARRANTY; without even the implied warranty of
-		MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-		GNU General Public License for more details.
-
-		You should have received a copy of the GNU General Public License
-		along with this program.  If not, see <http://www.gnu.org/licenses/>.
+		This work is licensed under the Creative Commons Attribution-ShareAlike
+		4.0 International License. To view a copy of this license, 
+		visit http://creativecommons.org/licenses/by-sa/4.0/.
+		
+		Author: Ashley Unwin
+		Website: http://www.ashleyunwin.com/powershell-office-365-admin-script/
 		
 		######################################################################
-		Known Bugs:
+		Known Bugs and Feature Requests:
 		- Cannot accept company names with space - Cause: Line 61 $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
 		- Cannot Switch company by re-running qqq
-		- Rename Account/email
-		- Remove Account
+		- FEATURE: Rename Account/email
+		- FEATURE: Remove Account
 		- fEditUserAccountName might not change the name of the mailbox itself
-		- hide from gal
-		- external auth
+		- FEATURE: hide from gal
+		- FEATURE: external auth
 		######################################################################>
 
 
 function global:start-login{
+	$ErrorActionPreference = 'Stop'
+	$global:ForceLoginFirst = $true
 	#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
 
 	if (get-module -name MenuSystem){}else{
@@ -51,7 +47,7 @@ function global:start-login{
 	}
 	fclear-login
 	cls
-	fLoginMenu
+	fLoginMenu	
 }
 
 function global:fLoginMenu{
@@ -131,8 +127,7 @@ PARAM(
 		Import-PSSession $O365Session
 		write-host "Connecting to MSOL Service" -Fore Green
 		Connect-MsolService –Credential $O365Cred
-		cls
-		write-host "`nYou are now logged in to"$xCompany". Type 'use-admin' to access the menu." -Fore Green
+		write-host "`nYou are now logged in to"$xCompany". Type 'Use-Admin' to access the menu." -Fore Green
 	}else{
 		write-host "`n`tNo Account Set - Not Attempting Login to 365 `n" -Fore Red
 	}
@@ -227,6 +222,10 @@ Return
 }
 
 function global:Use-Admin {
+	if ($global:ForceLoginFirst -eq $false) {
+		Return "Please run 'Start-Login' to Login to 365 First"
+	}
+
 	if (get-module -name MenuSystem){
 	}elseif (Test-Path c:\powershell\MenuSystem.psm1) {
 		Import-Module c:\powershell\MenuSystem.psm1
@@ -237,7 +236,6 @@ function global:Use-Admin {
 	[bool]$global:UseAdminLoaded=$true
 
 	$global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
-										"Licence Names"="fGetMsolAccountSku"
 										"New User"="fAddNewUser"
 										"List Users"="fListUsers"
 										"Edit User Account Name"="fEditUserAccountName"
@@ -255,13 +253,17 @@ function global:Use-Admin {
 																		"Disable IMAP Access"="fDisableImap"
 																		"Disable POP Access"="fDisablePop"
 																		}
-										"Hide/Unhide from GAL"="fToggleHideFromGAL"
+										"Hide/Unhide from GAL"="fToggleMailboxHideFromGAL"
+										"Remove Mailbox Email Alias"="fRemoveMailboxEmailAlias"
+										"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
 										}
 			"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
 										"Add User to Dist Group"="fadduserdistgroup"
 										"Remove User from Dist Group" = "fremoveuserdistgroup"
 										"Add New Dist Group"="fAddNewDistGroup"
-										"Add Email Alias to Dist Group"="fAddDistGroupEmailAlias"}
+										"Add Group Email Alias"="fAddDistGroupEmailAlias"
+										"Remove Group Email Alias"="fRemoveDistGroupEmailAlias"
+										"Hide/Unhide from GAL"="fToggleDistHideFromGAL"}
 			"MSOnline Org"=@{			"List Partner Information"="fViewPartnerInfo"
 										"List Domain Info"="fVeiwDomain"
 										"List Licencing Status"="fGetMsolAccountSku"
@@ -288,11 +290,11 @@ PARAM(
 [bool]$xRestore
 )
 	if ($xRestore) {
-		$global:SelectionHist = $xTempSelectionHist
-		$global:Quit = $xTempQuit
+		$global:SelectionHist = $global:xTempSelectionHist
+		$global:Quit = $global:xTempQuit
 	} else {
-		$xTempSelectionHist = $global:SelectionHist
-		$xTempQuit = $global:Quit
+		$global:xTempSelectionHist = $global:SelectionHist
+		$global:xTempQuit = $global:Quit
 	}
 }
 
@@ -331,10 +333,10 @@ PARAM(
 [string]$xText,
 [bool]$xCurrent = $false
 )
-	while (!$xVar) {
-		$xInput = fUserPrompt -xQuestion $xText+" (Type 'QUIT' to exit)"
+	while (!$xfCollectUPNvUPN) {
+		$xInput = fUserPrompt -xQuestion $xText" (Type 'QUIT' to exit)"
 		if (fCheckUPN -xUPN $xInput -xCurrent $xCurrent) {
-			$xVar = $xInput
+			$xfCollectUPNvUPN = $xInput
 			remove-variable -name xInput
 		} elseif ($xInput -eq "quit") {
 			Return $false
@@ -343,7 +345,7 @@ PARAM(
 			fDisplayInfo -xText "Invalid Selection" -xColor "red"
 		}
 	}
-	Return $xVar
+	Return $xfCollectUPNvUPN
 }
 
 function global:fCheckIdentity {
@@ -386,6 +388,7 @@ PARAM(
 
 
 #Users =======================================================================================
+
 function global:fResetUserPasswords {
 	fStoreMainMenu -xRestore 0
 	#Create a function to actually change the password
@@ -461,7 +464,7 @@ function global:fAddNewUser {
 			} else {
 				fAddNewUserLicCheck
 				fStoreMainMenu -xRestore 1
-				return
+				return 
 			}
 		}
 	}
@@ -471,14 +474,15 @@ function global:fAddNewUser {
 
 function global:fListUsers {
 	write-host (get-msoluser | format-table | out-string)
+	pause
 }
 
 function global:fEditUserAccountName {
 		
-	$xOldUPN = fCollectUPN -xText "Enter Old User UPN: (Type 'QUIT' to exit)"
+	$xOldUPN = fCollectUPN -xText "Enter Old User UPN:"
 	if ($xOldUPN -eq $false) {Return $false}	
 	
-	$xNewUPN = fCollectUPN -xText "Enter New User UPN: (Type 'QUIT' to exit)"
+	$xNewUPN = fCollectUPN -xText "Enter New User UPN:"
 	if ($xNewUPN -eq $false) {Return $false}	
 
 	$xNewFirstName = fUserPrompt -xQuestion "What is the New Users First Name"
@@ -495,6 +499,7 @@ function global:fEditUserAccountName {
 
 
 #Mailboxes =======================================================================================
+
 function global:fAddMailboxFolderPerm {
 	fStoreMainMenu -xRestore 0
 	cls
@@ -607,25 +612,85 @@ function global:fAddUserEmailAlias {
 	pause
 }
 
-function global:fToggleHideFromGAL {
-	$xUser = fCollectIdentity -xText "Enter the User who would like to hide"
+function global:fToggleMailboxHideFromGAL {
+	$xUser = fCollectIdentity -xText "Enter the User who you would like to hide"
 	if ($xUser -eq $false) {Return $false}
 	$xStatus = Get-mailbox -identity $xUser | select HiddenFromAddressListsEnabled
 	if ($xStatus.HiddenFromAddressListsEnabled) {
-		$xUnhide = "n"
-		while ($xUnhide -ne "y") {
-			$xUnhide = fUserPrompt -xQuestion "Would you like to unhide the mailbox? (y/n)"
-		}
+		$xUnhide = "x"
+		$xUnhide = fUserPrompt -xQuestion "Would you like to unhide the mailbox? (y/n)"
+		if ($xUnhide -eq "n") {Return $false}
 		if ($xUnHide -eq "y") {$xHidden = $false}
 	} else {
-		$xhide = "n"
+		$xhide = "x"
 		$xhide = fUserPrompt -xQuestion "Would you like to hide the mailbox? (y/n)"
+		if ($xHide -eq "n") {Return $false}
 		if ($xHide -eq "y") {$xHidden = $true}
 	}
 	Set-mailbox -identity $xUser -HiddenFromAddressListsEnabled $xHidden
 	write-host ( get-mailbox -identity $xUser | select Displayname, HiddenFromAddressListsEnabled | format-list | out-string )
 	pause
 }
+
+function global:fAddMailboxEmailAlias {
+
+	$xIdentity = fCollectIdentity -xText "Enter identity:"
+	if ($xIdentity -eq $false) {Return $false}
+		
+	$xMailbox = get-mailbox -identity $xIdentity 
+	$xEmails = $xMailbox.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this mailbox are"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	write-host 
+	
+	$xNewEmailAddress = fCollectUPN -xText "Enter the additional email address:" -xCurrent $false
+	if ($xNewEmailAddress -eq $false) {Return}
+
+	Set-Mailbox -identity $xIdentity -emailaddresses @{Add=$xNewEmailAddress}
+
+	$xIdentity = Get-Mailbox -identity $xIdentity 
+	$xEmails = $xMailbox.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this mailbox are now"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	pause
+}
+
+function global:fRemoveMailboxEmailAlias {
+
+	$xIdentity = fCollectIdentity -xText "Enter identity:"
+	if ($xIdentity -eq $false) {Return $false}
+		
+	$xMailbox = get-mailbox -identity $xIdentity 
+	$xEmails = $xMailbox.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this mailbox are"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	write-host 
+	
+	$xNewEmailAddress = fCollectUPN -xText "Enter the email address to remove:" -xCurrent $false
+	if ($xNewEmailAddress -eq $false) {Return}
+
+	Set-Mailbox -identity $xIdentity -emailaddresses @{Remove=$xNewEmailAddress}
+
+	$xIdentity = Get-Mailbox -identity $xIdentity 
+	$xEmails = $xMailbox.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this mailbox are now"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	pause
+}
+
+
 
 #Mailbox Services =======================================================================================
 
@@ -714,7 +779,9 @@ function global:fDisablePop {
 
 
 
+
 #Dist Groups =======================================================================================
+
 function global:fListDistMembers {
 PARAM(
 [string]$xGroupName
@@ -727,11 +794,12 @@ PARAM(
 			}
 					write-host "`n" 
 		}
+		pause
 	}else{
 		write-host $xGroupName"`n==========="
 		write-host (Get-DistributionGroupMember $xGroupName | select DisplayName | format-table | out-string)
 	}	
-	pause
+	
 }
 
 function global:fRemoveMailboxFolderPerm {
@@ -828,12 +896,9 @@ function global:fAddDistGroupEmailAlias {
 
 	$xGroupName = fCollectIdentity -xText "Enter Group Name:"
 	if ($xGroupName -eq $false) {Return $false}
-	if ($xGroupName -eq $false) {
-		Return
-	}
-	
-	$xVar = get-distributiongroup -identity $xGroupName 
-	$xEmails = $xVar.EmailAddresses
+		
+	$xDistGroup = get-distributiongroup -identity $xGroupName 
+	$xEmails = $xDistGroup.EmailAddresses
 	$i = 1
 	fDisplayInfo -xText "The current emails attached to this group are"
 	foreach ($email in $xEmails) {
@@ -841,15 +906,13 @@ function global:fAddDistGroupEmailAlias {
 	}
 	write-host 
 
-	
-	$xNewEmailAddress = fCollectUPN -xText "Enter the additional email address" -xCurrent $false
+	$xNewEmailAddress = fCollectUPN -xText "Enter the additional email address:" -xCurrent $false
 	if ($xNewEmailAddress -eq $false) {Return}
-	
-	$xNewEmailAddress = fuserPrompt -xQuestion "Enter the additional email address"
+		
 	Set-DistributionGroup $xGroupName -emailaddresses @{Add=$xNewEmailAddress}
 	
-	$xVar = get-distributiongroup -identity $xGroupName 
-	$xEmails = $xVar.EmailAddresses
+	$xDistGroup = get-distributiongroup -identity $xGroupName 
+	$xEmails = $xDistGroup.EmailAddresses
 	$i = 1
 	fDisplayInfo -xText "The current emails attached to this group are now"
 	foreach ($email in $xEmails) {
@@ -858,6 +921,57 @@ function global:fAddDistGroupEmailAlias {
 	pause
 }
 
+function global:fRemoveDistGroupEmailAlias {
+
+	$xGroupName = fCollectIdentity -xText "Enter Group Name:"
+	if ($xGroupName -eq $false) {Return $false}
+	if ($xGroupName -eq $false) {
+		Return
+	}
+	
+	$xDistGroup = get-distributiongroup -identity $xGroupName 
+	$xEmails = $xDistGroup.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this group are"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	write-host 
+	
+	$xNewEmailAddress = fCollectUPN -xText "Enter the email address to remove" -xCurrent $false
+	if ($xNewEmailAddress -eq $false) {Return}
+	
+	Set-DistributionGroup $xGroupName -emailaddresses @{Remove=$xNewEmailAddress}
+	
+	$xDistGroup = get-distributiongroup -identity $xGroupName 
+	$xEmails = $xDistGroup.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this group are now"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	pause
+}
+
+function global:fToggleDistHideFromGAL {
+	$xName = fCollectIdentity -xText "Enter the group you would like to hide"
+	if ($xName -eq $false) {Return $false}
+	$xStatus = Get-DistributionGroup -identity $xName | select HiddenFromAddressListsEnabled
+	if ($xStatus.HiddenFromAddressListsEnabled) {
+		$xUnhide = "x"
+		$xUnhide = fUserPrompt -xQuestion "Would you like to unhide the Group? (y/n)"
+		if ($xUnhide -eq "n") {Return $false}
+		if ($xUnHide -eq "y") {$xHidden = $false}
+	} else {
+		$xhide = "x"
+		$xhide = fUserPrompt -xQuestion "Would you like to hide the Group? (y/n)"
+		if ($xHide -eq "n") {Return $false}
+		if ($xHide -eq "y") {$xHidden = $true}
+	}
+	Set-DistributionGroup -identity $xName -HiddenFromAddressListsEnabled $xHidden
+	write-host ( Get-DistributionGroup -identity $xName | select Displayname, HiddenFromAddressListsEnabled | format-list | out-string )
+	pause
+}
 
 
 #Organisation =======================================================================================
@@ -883,3 +997,6 @@ function global:fGetMsolAccountSku {
 function global:fExperimentalFunction{
 
 }
+
+
+$global:ForceLoginFirst = $false
