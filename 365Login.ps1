@@ -21,9 +21,10 @@
 		- fEditUserAccountName might not change the name of the mailbox itself
 		- FEATURE: hide from gal
 		- FEATURE: external auth
+		- FEATURE: Remove Dis Group
 		######################################################################>
 
-
+# Control the login process ================================================================
 function global:start-login{
 	$ErrorActionPreference = 'Stop'
 	$global:ForceLoginFirst = $true
@@ -127,6 +128,7 @@ PARAM(
 		Import-PSSession $O365Session
 		write-host "Connecting to MSOL Service" -Fore Green
 		Connect-MsolService –Credential $O365Cred
+		cls
 		write-host "`nYou are now logged in to"$xCompany". Type 'Use-Admin' to access the menu." -Fore Green
 	}else{
 		write-host "`n`tNo Account Set - Not Attempting Login to 365 `n" -Fore Red
@@ -157,9 +159,13 @@ function global:clear-passwords{
 	Remove-item C:\O365\* -confirm
 }	
 
-function global:qqq{start-login}
 
+# Functions to run the Admin menu ============================================================
+
+function global:qq{start-login; use-admin}
+function global:qqq{start-login}
 function global:www{use-admin}
+
 
 function global:fUserPrompt {
 PARAM(
@@ -223,7 +229,7 @@ Return
 
 function global:Use-Admin {
 	if ($global:ForceLoginFirst -eq $false) {
-		Return "Please run 'Start-Login' to Login to 365 First"
+		Return "`n`n`tPlease run 'Start-Login' to Login to Office 365 First`n`n`tSome Shortcuts for you: `n`t'qqq' will quickly run start-login, `n`t'www' will quickly run Use-Admin, `n`t'qq' to run Login and Admin together!`n`n "
 	}
 
 	if (get-module -name MenuSystem){
@@ -240,11 +246,14 @@ function global:Use-Admin {
 										"List Users"="fListUsers"
 										"Edit User Account Name"="fEditUserAccountName"
 										}
-			"Mailboxes"=@{				"Grant User Access to Mailbox Folder"="fAddMailboxFolderPerm"
-										"Add Email Alias"="fAddUserEmailAlias"
-										"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
-										"Grant Full Access to Mailbox"="fGrantFullAccessMailbox"
-										"Remove Full Access to Mailbox"="fRemoveFullAccessMailbox"
+			"Mailboxes"=@{				"Folder Access"=@{
+																	"Grant User Access to Mailbox Folder"="fAddMailboxFolderPerm"
+																	"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
+																	}
+										"Full Access Permissions"=@{
+																	"Grant Full Access to Mailbox"="fGrantFullAccessMailbox"
+																	"Remove Full Access from Mailbox"="fRemoveFullAccessMailbox"
+																	}
 										"List Mailboxes"="fListMailboxes"
 										"List Mailbox Statistics"="fListMailboxStats"
 										"List Email Forwarding Status"="fCheckForwarding"
@@ -254,19 +263,29 @@ function global:Use-Admin {
 																		"Disable POP Access"="fDisablePop"
 																		}
 										"Hide/Unhide from GAL"="fToggleMailboxHideFromGAL"
-										"Remove Mailbox Email Alias"="fRemoveMailboxEmailAlias"
-										"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
+										"Email Alias for Mailboxes"=@{
+																	"Remove Mailbox Email Alias"="fRemoveMailboxEmailAlias"
+																	"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
+																	}
 										}
 			"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
-										"Add User to Dist Group"="fadduserdistgroup"
-										"Remove User from Dist Group" = "fremoveuserdistgroup"
+										"Edit Group Members"=@{
+																"Add User to Dist Group"="fadduserdistgroup"
+																"Remove User from Dist Group" = "fremoveuserdistgroup"
+																}
 										"Add New Dist Group"="fAddNewDistGroup"
-										"Add Group Email Alias"="fAddDistGroupEmailAlias"
-										"Remove Group Email Alias"="fRemoveDistGroupEmailAlias"
-										"Hide/Unhide from GAL"="fToggleDistHideFromGAL"}
+										"Email Alias for Dist Groups"=@{
+																		"Add Group Email Alias"="fAddDistGroupEmailAlias"
+																		"Remove Group Email Alias"="fRemoveDistGroupEmailAlias"
+																		}	
+										"Hide/Unhide from GAL"="fToggleDistHideFromGAL"
+										}
 			"MSOnline Org"=@{			"List Partner Information"="fViewPartnerInfo"
 										"List Domain Info"="fVeiwDomain"
 										"List Licencing Status"="fGetMsolAccountSku"
+										}
+			"Transport Rules"=@{		"List Transport Rule Status"="fGetTranStatus"
+										"Toggle Rule Status"="fToggleTransportRule"
 										}
 			"X-Experimental Function"="fExperimentalFunction"							
 										
@@ -290,11 +309,12 @@ PARAM(
 [bool]$xRestore
 )
 	if ($xRestore) {
+		#Restores Settings
 		$global:SelectionHist = $global:xTempSelectionHist
-		$global:Quit = $global:xTempQuit
+		$global:QuitMenu = $false
 	} else {
+		#Saves Settings
 		$global:xTempSelectionHist = $global:SelectionHist
-		$global:xTempQuit = $global:Quit
 	}
 }
 
@@ -350,17 +370,34 @@ PARAM(
 
 function global:fCheckIdentity {
 PARAM(
-[string]$id
+[string]$id,
+[string]$xdefine
 )
 #Function to check if an identity specified exists
-	if (Get-Mailbox -identity $id -ErrorAction 'silentlycontinue') {
-		Return $true
-	} elseif (Get-DistributionGroup -identity $id -ErrorAction 'silentlycontinue') {
-		Return $true
-	} elseif (Get-Contact -identity $id -ErrorAction 'silentlycontinue') {
-		Return $true
-	} 
-	Return $false	
+
+	if ($xDefine -eq $null) {
+		if (Get-Mailbox -identity $id -ErrorAction 'silentlycontinue') {
+			Return $true
+		} elseif (Get-DistributionGroup -identity $id -ErrorAction 'silentlycontinue') {
+			Return $true
+		} elseif (Get-Contact -identity $id -ErrorAction 'silentlycontinue') {
+			Return $true
+		} 
+		Return $false
+	}elseif ($xDefine -eq "mailbox") {
+		if (Get-Mailbox -identity $id -ErrorAction 'silentlycontinue') {
+			Return $true
+		}
+	}elseif ($xDefine -eq "group") {
+		if (Get-DistributionGroup -identity $id -ErrorAction 'silentlycontinue') {
+			Return $true
+		}
+	}elseif ($xDefine -eq "contact") {
+		if (Get-Contact -identity $id -ErrorAction 'silentlycontinue') {
+			Return $true
+		}
+	}
+	Return $false
 }
 
 function global:fCollectIdentity {
@@ -382,10 +419,9 @@ PARAM(
 	Return $xVar
 }
 
+function global:reload {Z:\~Tools\Powershell\Profile.ps1}
 
-# Below this line are the functions called by the menu values
-
-
+# Below this line are the functions called by the menu values=================================
 
 #Users =======================================================================================
 
@@ -496,8 +532,6 @@ function global:fEditUserAccountName {
 }
 
 
-
-
 #Mailboxes =======================================================================================
 
 function global:fAddMailboxFolderPerm {
@@ -577,38 +611,6 @@ function global:fListMailboxStats {
 
 function global:fCheckForwarding {
 	write-host (get-mailbox | select DisplayName, PrimarySMTPAddress, forwardingaddress, forwardingsmtpaddress, DeliverToMailboxAndForward | format-table | out-string)
-	pause
-}
-
-function global:fAddUserEmailAlias {
-
-	$xUser = fCollectIdentity -xText "Enter User ID:"
-	if ($xUser -eq $false) {Return $false}
-
-	$xVar = get-mailbox -id $xUser
-	$xEmails = $xVar.EmailAddresses
-	$i = 1
-	fDisplayInfo -xText "The current emails attached to this user are"
-	foreach ($email in $xEmails) {
-		Write-Host "`t`t"$i" - "$email; $i++
-	}
-	write-host
-	
-	$xNewEmailAddress = fCollectUPN -xText "Enter the New Email Address to add:"
-	if ($xNewEmailAddress -eq $false) {Return $false}
-
-	$xNewEmailAddress = "smtp:"+$xNewEmailAddress
-	Set-Mailbox -id $xUPN -emailAddresses @{Add=$xNewEmailAddress}
-
-	$xVar = get-mailbox -id $xUser
-	$xEmails = $xVar.EmailAddresses
-	$i = 1
-	fDisplayInfo -xText "The current emails attached to this user are"
-	foreach ($email in $xEmails) {
-		Write-Host "`t`t"$i" - "$email 
-		$i++
-	}
-	write-host
 	pause
 }
 
@@ -991,6 +993,46 @@ function global:fGetMsolAccountSku {
 	pause
 }
 
+#Transport Rules =======================================================================================
+
+function global:fGetTranStatus {
+	write-host (get-TransportRule | select name, state | format-table | out-string)
+	pause
+
+}
+
+function global:fToggleTransportRule {
+	fStoreMainMenu -xRestore 0
+
+	function global:fToggleTransportRuleRun {
+	param(
+	[string]$xIdentity
+	)
+		fDisplayInfo -xText "Toggling Transport Rule"
+		$xTR = Get-TransportRule -Identity $xIdentity 
+		
+		if ($xTR.State -eq "Enabled") {
+			Disable-TransportRule -Identity $xIdentity
+			write-host (Get-TransportRule -Identity $xIdentity | select name, state | format-table | out-string)	
+			pause
+		}elseif ($xTR.State -eq "Disabled") {
+			Enable-TransportRule -Identity $xIdentity
+			write-host (Get-TransportRule -Identity $xIdentity | select name, state | format-table | out-string)	
+			pause
+		}else{
+			Write-error "Failed to Establish if $xTRState was enabled or disabled in function global:fToggleTransportRuleRun"
+			pause
+		}
+		fStoreMainMenu -xRestore 1
+	}
+	
+	$xTRMenuHash = New-Object System.Collections.HashTable
+	Get-TransportRule | sort-object Name | foreach-object {
+			$xTRMenuHash.add($_.Name+" - "+$_.State,'fToggleTransportRuleRun -xIdentity "'+$_.Name+'"')
+		}
+	use-menu -MenuHash $xTRMenuHash -Title "Select a Transport Rule" -NoSplash 1
+	fStoreMainMenu -xRestore 1
+}
 
 # Other functions =======================================================================================
 
@@ -999,4 +1041,4 @@ function global:fExperimentalFunction{
 }
 
 
-$global:ForceLoginFirst = $false
+if (!$global:ForceLoginFirst) {$global:ForceLoginFirst = $false}
