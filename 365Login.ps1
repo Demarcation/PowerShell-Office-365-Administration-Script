@@ -371,11 +371,10 @@ PARAM(
 function global:fCheckIdentity {
 PARAM(
 [string]$id,
-[string]$xdefine
+[string]$xDefine = "any"
 )
 #Function to check if an identity specified exists
-
-	if ($xDefine -eq $null) {
+	if ($xDefine -eq "any") {
 		if (Get-Mailbox -identity $id -ErrorAction 'silentlycontinue') {
 			Return $true
 		} elseif (Get-DistributionGroup -identity $id -ErrorAction 'silentlycontinue') {
@@ -398,6 +397,7 @@ PARAM(
 		}
 	}
 	Return $false
+	write-error "Unable to Determine the status in function global:fCheckIdentity"
 }
 
 function global:fCollectIdentity {
