@@ -396,8 +396,8 @@ PARAM(
 			Return $true
 		}
 	}
-	Return $false
 	write-error "Unable to Determine the status in function global:fCheckIdentity"
+	Return $false
 }
 
 function global:fCollectIdentity {
