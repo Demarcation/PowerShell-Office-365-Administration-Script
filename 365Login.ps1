@@ -23,6 +23,7 @@
 		- FEATURE: external auth
 		- FEATURE: Remove Dis Group
 		- FEATURE: Check Azure Online module and Sign In Assistant and download/install if required http://stackoverflow.com/questions/16018732/msonline-cant-be-imported-on-powershell-connect-msolservice-error
+		- BUG STATUS-CONFIRMED: fSetDefaultEmailAlias does not work
 		######################################################################>
 
 # Control the login process ================================================================
