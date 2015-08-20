@@ -14,19 +14,22 @@
 		
 		######################################################################
 		Known Bugs and Feature Requests:
-		- Cannot accept company names with space - Cause: Line 61 $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
-		- Cannot Switch company by re-running qqq
+		- BUG STATUS-CONFIRMED: Cannot accept company names with space - Cause: Line 61 $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
+		- BUG STATUS-UNKNOWN: Cannot Switch company by re-running qqq
 		- FEATURE: Rename Account/email
 		- FEATURE: Remove Account
-		- fEditUserAccountName might not change the name of the mailbox itself
+		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
 		- FEATURE: hide from gal
 		- FEATURE: external auth
 		- FEATURE: Remove Dis Group
+		- FEATURE: Check Azure Online module and Sign In Assistant and download/install if required http://stackoverflow.com/questions/16018732/msonline-cant-be-imported-on-powershell-connect-msolservice-error
 		######################################################################>
 
 # Control the login process ================================================================
+
+$ErrorActionPreference = 'Stop'
+
 function global:start-login{
-	$ErrorActionPreference = 'Stop'
 	$global:ForceLoginFirst = $true
 	#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
 
@@ -266,6 +269,7 @@ function global:Use-Admin {
 										"Email Alias for Mailboxes"=@{
 																	"Remove Mailbox Email Alias"="fRemoveMailboxEmailAlias"
 																	"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
+																	"Set Default Mailbox Alias"="fSetDefaultEmailAlias"
 																	}
 										}
 			"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
@@ -436,19 +440,19 @@ function global:fResetUserPasswords {
 		$xPass = fUserPrompt -xQuestion $xString -xPrompt "Password"
 		if ($xPass -ne "quit") {
 			if (($xPass -ne "") -AND ($xPass -ne $null)) {
-				write-host (DisplayInfo -xText "Setting New Password")
+				fDisplayInfo -xText "Setting New Password"
 				Write-host
 				$xPass = Set-MsolUserPassword -UserPrincipalName $xUser -ForceChangePassword $false -NewPassword $xPass
-				write-host (fDisplayInfo -xText "Password now set" -xColor "Red" -xTime 3)
+				fDisplayInfo -xText "Password now set" -xColor "green" -xTime 3
 				$xPass = $null	
 				Cls
 				} else {
-				write-host (fDisplayInfo -xText "Password not entered, Nothing has been changed." -xColor "Red")
+				fDisplayInfo -xText "Password not entered, Nothing has been changed." -xColor "Red"
 				fResetUserPasswordsCollectPass -xUser $xUser				
 			}
 		}else{
 		cls
-		write-host (fDisplayInfo -xText "Quitting....Nothing has been changed." -xColor "Red" -xTime 3)
+		fDisplayInfo -xText "Quitting....Nothing has been changed." -xColor "Red" -xTime 3
 		Cls
 		}
 	}
@@ -653,7 +657,7 @@ function global:fAddMailboxEmailAlias {
 
 	Set-Mailbox -identity $xIdentity -emailaddresses @{Add=$xNewEmailAddress}
 
-	$xIdentity = Get-Mailbox -identity $xIdentity 
+	$xMailbox = Get-Mailbox -identity $xIdentity 
 	$xEmails = $xMailbox.EmailAddresses
 	$i = 1
 	fDisplayInfo -xText "The current emails attached to this mailbox are now"
@@ -692,6 +696,26 @@ function global:fRemoveMailboxEmailAlias {
 	pause
 }
 
+function global:fSetDefaultEmailAlias {
+
+
+	$xIdentity = fCollectIdentity -xText "Enter Identity:"
+	if ($xIdentity -eq $false) {Return $false}
+	
+	$xMailbox = get-mailbox $xIdentity
+	$i = 0; 
+	
+	foreach ($email in $xMailbox.EmailAddresses) {
+		if ($email -cmatch "SMTP:") {
+			$xMailBox.EmailAddresses[$i] = "smtp:ash@sussexcommunity.org.uk"
+		} 
+		$i++ 
+	}
+
+	set-mailbox -identity $xIdentity -EmailAddresses $xMailBox.EmailAddresses
+	
+	Pause
+}
 
 
 #Mailbox Services =======================================================================================
