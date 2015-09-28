@@ -15,7 +15,6 @@
 		######################################################################
 		Known Bugs and Feature Requests:
 		- BUG STATUS-CONFIRMED: Cannot accept company names with space - Cause: Line 61 $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
-		- BUG STATUS-UNKNOWN: Cannot Switch company by re-running qqq
 		- FEATURE: Rename Account/email
 		- FEATURE: Remove Account
 		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
@@ -23,7 +22,9 @@
 		- FEATURE: external auth
 		- FEATURE: Remove Dis Group
 		- FEATURE: Check Azure Online module and Sign In Assistant and download/install if required http://stackoverflow.com/questions/16018732/msonline-cant-be-imported-on-powershell-connect-msolservice-error
+		- COMPLETE - FEATURE: Forward Users Emails
 		- BUG STATUS-CONFIRMED: fSetDefaultEmailAlias does not work
+		- FEATURE: Add Shared Mailbox
 		######################################################################>
 
 # Control the login process ================================================================
@@ -272,6 +273,7 @@ function global:Use-Admin {
 																	"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
 																	"Set Default Mailbox Alias"="fSetDefaultEmailAlias"
 																	}
+										"Forward Users Emails"="fSetMailboxForwarding"
 										}
 			"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
 										"Edit Group Members"=@{
@@ -615,7 +617,7 @@ function global:fListMailboxStats {
 }
 
 function global:fCheckForwarding {
-	write-host (get-mailbox | select DisplayName, PrimarySMTPAddress, forwardingaddress, forwardingsmtpaddress, DeliverToMailboxAndForward | format-table | out-string)
+	write-host (get-mailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
 	pause
 }
 
@@ -718,6 +720,52 @@ function global:fSetDefaultEmailAlias {
 	Pause
 }
 
+function global:fSetMailboxForwarding {
+	$xIdentity = fCollectIdentity -xText "Enter Alias of User to Forward:"
+	if ($xIdentity -eq $false) {Return $false}
+	
+	$xMailbox = get-mailbox -identity $xIdentity 
+	
+	fDisplayInfo -xText "The current setup is:"
+	write-host ($xMailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
+	
+	if (($xMailbox.ForwardingAddress -ne $null) -OR ($xMailbox.ForwardingSMTPAddress -ne $null)    ) {
+		
+		$xFwdCancel = fUserPrompt -xQuestion "Would you like to cancel the Current Forwarding? (y/n)"
+			
+		if ($xFwdCancel -eq "y") {
+			set-mailbox -identity $xIdentity -ForwardingAddress $null -ForwardingSMTPAddress $null -DeliverToMailboxAndForward $false
+		}elseif ($xFwdCancel -eq "n") {
+			$xMailbox = get-mailbox -identity $xIdentity 
+			fDisplayInfo -xText "Your configuration has not changed" -xColor Yellow
+			pause
+			Return $false
+		}else{
+			Return $false
+		}
+			
+	} else {
+	
+		$xFwdAddress = fCollectIdentity -xText "Who would you like to forward email to?"
+		if ($xFwdAddress -eq $false) {Return $false}
+		
+		$xDelToMailbox = fUserPrompt -xQuestion "Would you like to continue delivering to the Mailbox? (y/n)"
+		
+		if ($xDelToMailbox -eq "y") {
+			set-mailbox -identity $xIdentity -ForwardingAddress $xFwdAddress -DeliverToMailboxAndForward $true
+		}elseif ($xDelToMailbox -eq "n") {
+			set-mailbox -identity $xIdentity -ForwardingAddress $xFwdAddress -DeliverToMailboxAndForward $false 
+		}else{
+			Return $false
+		}
+	
+	}
+	
+	$xMailbox = get-mailbox -identity $xIdentity 
+	fDisplayInfo -xText "The New setup is:"
+	write-host ($xMailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
+	pause
+}
 
 #Mailbox Services =======================================================================================
 
