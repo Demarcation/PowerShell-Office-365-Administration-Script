@@ -18,13 +18,15 @@
 		- FEATURE: Rename Account/email
 		- FEATURE: Remove Account
 		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
-		- FEATURE: hide from gal
-		- FEATURE: external auth
+		- FEATURE: External Auth on Dist group
 		- FEATURE: Remove Dis Group
 		- FEATURE: Check Azure Online module and Sign In Assistant and download/install if required http://stackoverflow.com/questions/16018732/msonline-cant-be-imported-on-powershell-connect-msolservice-error
-		- COMPLETE - FEATURE: Forward Users Emails
 		- BUG STATUS-CONFIRMED: fSetDefaultEmailAlias does not work
-		- FEATURE: Add Shared Mailbox
+		- FEATURE - COMPLETE: Add Shared Mailbox
+		- UPDATE - COMPLETE: Add New User now select from domain list rather than enter own UPN - Less chance of User Error
+		- FEATURE - COMPLETE: Show Mailbox Permissions
+		- FEATURE - COMPLETE: hide from gal mailbox and dist group
+		- FEATURE - COMPLETE: Forward Users Emails
 		######################################################################>
 
 # Control the login process ================================================================
@@ -273,7 +275,9 @@ function global:Use-Admin {
 																	"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
 																	"Set Default Mailbox Alias"="fSetDefaultEmailAlias"
 																	}
-										"Forward Users Emails"="fSetMailboxForwarding"
+										"Change Forwarding Status"="fSetMailboxForwarding"
+										"Add Shared Mailbox"="fAddSharedMailbox"
+										"View Mailbox Permissions"="fShowMailboxPerms"
 										}
 			"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
 										"Edit Group Members"=@{
@@ -356,6 +360,7 @@ PARAM(
 }
 
 function global:fCollectUPN {
+#This function collects a valid UPN and will ask again if the entered information does not confirm to the correct layout and valid domains. 
 PARAM(
 [string]$xText,
 [bool]$xCurrent = $false
@@ -376,6 +381,7 @@ PARAM(
 }
 
 function global:fCheckIdentity {
+# This function checks if a given Alias the correct alias assigned to an object
 PARAM(
 [string]$id,
 [string]$xDefine = "any"
@@ -408,6 +414,7 @@ PARAM(
 }
 
 function global:fCollectIdentity {
+# This function Collects an Alias and checks that it is valid and currently in use in order to be used in modifying existing objects. If the Alias is invalid, it will ask again.
 PARAM(
 [string]$xText
 )
@@ -425,6 +432,28 @@ PARAM(
 	}
 	Return $xVar
 }
+
+function global:fCollectAlias {		
+		# This Function checks if the user is entering an AVLIABLE alias for a new object and if not requests the user re-enters the alias
+		$xAlias = fUserPrompt -xQuestion "Alias: (Type QUIT to exit)"
+		$xAliasValid = $false
+		while ($xAliasValid -eq $false) {
+			if ( $xAlias -eq "QUIT") {
+				Return $false
+			}elseif ((fCheckIdentity -id $xAlias) -eq $true) {
+				fDisplayInfo -xText "Alias already in use"
+				$xAlias = fUserPrompt -xQuestion "Alias"
+			} elseif ((fCheckIdentity -id $xAlias) -eq $false){
+				$xAliasValid = $true
+			}else {
+				Write-host "The fCollectAlias function has errored....QUITTING"
+				Pause
+				Return $false
+			}
+		}
+		Return $xAlias
+	}
+
 
 function global:reload {Z:\~Tools\Powershell\Profile.ps1}
 
@@ -476,8 +505,19 @@ function global:fAddNewUser {
 	fStoreMainMenu -xRestore 0
 	$xFirstName = fUserPrompt -xQuestion "First Name"
 	$xLastName = fUserPrompt -xQuestion "Last Name"
-	$xUPN = fCollectUPN -xText "User Principal Name:"
-	if ($xUPN -eq $false) {Return $false}
+	
+		
+	$xAlias = fUserPrompt -xQuestion "Alias"
+	#Create the Menu Hash Table Object	
+	$xDomainMenuHash = New-Object System.Collections.HashTable
+	#Create Menu Structure Hash Table and set values to be function with UPN as input
+	get-msoldomain | select name | sort-object Name | foreach-object {
+			$xDomainMenuHash.add($_.Name,'$Global:xUPN = "'+$xAlias+'@'+$_.Name+'"')
+		}
+	#Call the Menu	
+	use-menu -MenuHash $xDomainMenuHash -Title "Select Domain" -NoSplash $True
+	
+	
 	$xLicMenu = New-Object System.Collections.HashTable
 	Get-MsolAccountSku | sort-object AccountSkuId | select AccountSkuId | foreach-object {
 			$xLicMenu.add($_.AccountSkuId,"write-output "+$_.AccountSkuId)
@@ -499,7 +539,7 @@ function global:fAddNewUser {
 			fStoreMainMenu -xRestore 1
 			return
 		} else {
-			fDisplayInfo -xText "You Do Not currently have enough Licenses to proceed." -xText2 "Please Login to Office 365 and purchase more licences" -xText3 "before proceeding." -xTime 5
+			fDisplayInfo -xText "You Do Not currently have enough Licenses to proceed." -xText2 "Please Login to Office 365 Website and purchase more" -xText3 "licences before proceeding." -xTime 5
 			$xTryAgain = fUserPrompt -xQuestion "Try Again? (y/n)"
 			if ($xTryAgain -eq "n") {
 				fStoreMainMenu -xRestore 1
@@ -765,6 +805,40 @@ function global:fSetMailboxForwarding {
 	fDisplayInfo -xText "The New setup is:"
 	write-host ($xMailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
 	pause
+}
+
+function global:fAddSharedMailbox {
+	fStoreMainMenu -xRestore 0
+	
+	$xDisplayName = fUserPrompt -xQuestion "Display Name"
+	
+	$xAlias = fCollectAlias	
+	if ($xAlias -eq $false) {Return $false}
+	
+	#Create the Menu Hash Table Object	
+	$xDomainMenuHash = New-Object System.Collections.HashTable
+	#Create Menu Structure Hash Table and set values to be function with UPN as input
+	get-msoldomain | select name | sort-object Name | foreach-object {
+			$xDomainMenuHash.add($_.Name,'$global:xPrimarySMTPAddress = "'+$xAlias+'@'+$_.Name+'"')
+		}
+	#Call the Menu	
+	use-menu -MenuHash $xDomainMenuHash -Title "Select Domain" -NoSplash $True
+	
+	New-Mailbox -Name $xDisplayName –Shared -PrimarySmtpAddress $xPrimarySMTPAddress
+
+	pause
+
+	fStoreMainMenu -xRestore 1
+}
+
+function global:fShowMailboxPerms {
+	
+	$xAlias = fCollectIdentity -xText "Who's permissions would you like to check?"
+	
+	write-host (Get-MailboxPermission -identity $xAlias | select User, AccessRights | Format-Table | Out-String)
+	
+	pause
+	
 }
 
 #Mailbox Services =======================================================================================
