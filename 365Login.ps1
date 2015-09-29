@@ -507,7 +507,7 @@ function global:fAddNewUser {
 	$xLastName = fUserPrompt -xQuestion "Last Name"
 	
 		
-	$xAlias = fUserPrompt -xQuestion "Alias"
+	$xAlias = fCollectAlias
 	#Create the Menu Hash Table Object	
 	$xDomainMenuHash = New-Object System.Collections.HashTable
 	#Create Menu Structure Hash Table and set values to be function with UPN as input
