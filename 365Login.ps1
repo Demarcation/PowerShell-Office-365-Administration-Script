@@ -824,7 +824,9 @@ function global:fAddSharedMailbox {
 	#Call the Menu	
 	use-menu -MenuHash $xDomainMenuHash -Title "Select Domain" -NoSplash $True
 	
-	New-Mailbox -Name $xDisplayName –Shared -PrimarySmtpAddress $xPrimarySMTPAddress
+	New-Mailbox -Name $xAlias –Shared -PrimarySmtpAddress $xPrimarySMTPAddress -DisplayName $xDisplayName
+	
+	write-host (Get-Mailbox $xAlias | Select Name, Alias, IsShared, PrimarySMTPAddressSelect | format-table | out-string )
 
 	pause
 
