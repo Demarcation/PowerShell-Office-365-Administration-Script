@@ -255,10 +255,21 @@ HelpMessage='Time for message to be displayed')]
 [string]$xText3,
 [string]$xColor3 = "Cyan"
 )
-$count = $measureObject = $xText | Measure-Object -Character | select Characters
-$count = $count.Characters
+$xCount = $xText | Measure-Object -Character | select Characters
+$xCount = $xCount.Characters
+
+$xCount2 = $xText2 | Measure-Object -Character | select Characters
+$xCount2 = $xCount3.Characters
+
+$xCount3 = $xText3 | Measure-Object -Character | select Characters
+$xCount3 = $xCount3.Characters
+
+$xCountArray=@($xCount,$xCount2,$xCount3)
+$xCountFinal = $xCountArray | Measure-Object -Maximum
+
+
 $i=0
-while ($i -lt ($count + 18)) {[string]$xStars = $xStars+"*"; $i++}
+while ($i -lt ($xCountFinal.Maximum + 18)) {[string]$xStars = $xStars+"*"; $i++}
 Write-Host
 Write-Host $xStars -Fore Green 
 Write-Host "`t"$xText -Fore $xColor
