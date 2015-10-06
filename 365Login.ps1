@@ -22,11 +22,16 @@
 		- FEATURE: Remove Dis Group
 		- FEATURE: Check Azure Online module and Sign In Assistant and download/install if required http://stackoverflow.com/questions/16018732/msonline-cant-be-imported-on-powershell-connect-msolservice-error
 		- BUG STATUS-CONFIRMED: fSetDefaultEmailAlias does not work
+		- BUG: Discovery Search Mailbox long name causes issues in show fowarding Status
+		- FEATURE: List all emails - Get-Recipient | Select Name -ExpandProperty EmailAddresses | Select Name,  SmtpAddress
+		- FEATURE: Find Specfic email - Get-Recipient | Select Name -ExpandProperty Emailaddresses | ?{ $_.Smtpaddress -eq $xFindAddress} | select name, smtpaddress
 		- FEATURE - COMPLETE: Add Shared Mailbox
 		- UPDATE - COMPLETE: Add New User now select from domain list rather than enter own UPN - Less chance of User Error
 		- FEATURE - COMPLETE: Show Mailbox Permissions
 		- FEATURE - COMPLETE: hide from gal mailbox and dist group
 		- FEATURE - COMPLETE: Forward Users Emails
+		- UPDATE - COMPLETE: Remove Discovery Search From results - where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} |
+		- FEATURE - COMPLETE - Guided Install of Dependancies for Script to run
 		######################################################################>
 
 # Control the login process ================================================================
@@ -35,25 +40,58 @@ $ErrorActionPreference = 'Stop'
 
 function global:start-login{
 	$global:ForceLoginFirst = $true
+	
 	#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
-
-	if (get-module -name MenuSystem){}else{
+	Import-Module .\MenuSystem.psm1  -ErrorAction SilentlyContinue
+	$i = 0
+	while ((get-module -name MenuSystem) -eq $null) {
 		$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
 		$destination = ".\MenuSystem.psm1"
 		Invoke-WebRequest $source -OutFile $destination
-		#$destination = "Z:\~Tools\Powershell\MenuSystem.psm1" #Temp Line to test MenuSystem Edit
 		Import-Module $destination
+		if ((get-module -name MenuSystem) -ne $null) {fDisplayInfo -xText "Menu System Installed"} else {$i++}
+		if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Menu System"}
 	}
-	if (get-module -name MenuSystem) {} else {
-		fDisplayInfo -xText "MenuSystem Module not avalible, unable to contuinue" -xColor "red" -xTime 3
-		Return $false
+	
+	#This script requires Microsoft Online Services Sign-In Assistant for IT Professionals installed
+	$i = 0
+	while ((test-path $env:programfiles'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
+		fDisplayInfo -xText "It appears you don't have Microsoft Online Services Sign-In Assistant for IT Professionals installed" -xText2 "Let's Install that now"
+		$source = "http://download.microsoft.com/download/5/0/1/5017D39B-8E29-48C8-91A8-8D0E4968E6D4/en/msoidcli_64.msi" 
+		$destination = "./Microsoft Online Services Sign-In Assistant for IT Professionals RTW.msi"
+		Invoke-WebRequest $source -OutFile $destination
+		Invoke-Item $destination
+		if ((test-path $env:programfiles+'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
+			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	
+			$i++
+			if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Microsoft Online Services Sign-In Assistant"}
+			pause
+		}
 	}
-	Import-Module MSOnline
-	if (get-module -name MSOnline) {} else {
-		fDisplayInfo -xText "MS Online Module not avalible, unable to contuinue" -xColor "red" -xTime 3
-		Return $false
-	}
-	fclear-login
+	
+	#This script requires Azure Active Directory Module for Windows PowerShell installed
+	Import-Module MSOnline -ErrorAction SilentlyContinue
+	$i = 0
+	while ((Get-Module -Name MSOnline) -eq $null) {
+		fDisplayInfo -xText "It appears you don't have Azure Active Directory Module for Windows PowerShell installed" -xText2 "Let's Install that now" -xTime 3
+		$source = "https://bposast.vo.msecnd.net/MSOPMW/Current/amd64/AdministrationConfig-en.msi" 
+		$destination = "./Azure Active Directory Module for Windows PowerShell.msi"
+		Invoke-WebRequest $source -OutFile $destination
+		Invoke-Item $destination
+		fDisplayInfo -xText "Please complete the setup before continuing" -xtime 5
+		pause
+		Import-Module MSOnline  -ErrorAction SilentlyContinue
+		if ((Get-Module -Name MSOnline) -eq $null) {
+			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	-xTime 3
+			$i++
+			if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Azure Active Directory Module"}
+			pause
+		}
+		
+	}		
+		
+
+	fClear-Login
 	cls
 	fLoginMenu	
 }
@@ -166,13 +204,11 @@ function global:clear-passwords{
 	Remove-item C:\O365\* -confirm
 }	
 
-
 # Functions to run the Admin menu ============================================================
 
 function global:qq{start-login; use-admin}
 function global:qqq{start-login}
 function global:www{use-admin}
-
 
 function global:fUserPrompt {
 PARAM(
@@ -454,7 +490,6 @@ function global:fCollectAlias {
 		Return $xAlias
 	}
 
-
 function global:reload {Z:\~Tools\Powershell\Profile.ps1}
 
 # Below this line are the functions called by the menu values=================================
@@ -578,7 +613,6 @@ function global:fEditUserAccountName {
 	#This might not rename mailbox - investigate
 }
 
-
 #Mailboxes =======================================================================================
 
 function global:fAddMailboxFolderPerm {
@@ -647,17 +681,17 @@ function global:fRemoveFullAccessMailbox {
 }
 
 function global:fListMailboxes {
-	write-host (get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | format-table | out-string)
+	write-host (get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | format-table | out-string)
 	pause
 }
 
 function global:fListMailboxStats {
-	write-host (get-mailbox | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }  | format-table | out-string)
+	write-host (get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }  | format-table | out-string)
 	pause
 }
 
 function global:fCheckForwarding {
-	write-host (get-mailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
+	write-host (get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
 	pause
 }
 
@@ -928,9 +962,6 @@ function global:fDisablePop {
 	pause
 }
 
-
-
-
 #Dist Groups =======================================================================================
 
 function global:fListDistMembers {
@@ -1124,7 +1155,6 @@ function global:fToggleDistHideFromGAL {
 	pause
 }
 
-
 #Organisation =======================================================================================
 	
 function global:fViewPartnerInfo {
@@ -1188,6 +1218,5 @@ function global:fToggleTransportRule {
 function global:fExperimentalFunction{
 
 }
-
 
 if (!$global:ForceLoginFirst) {$global:ForceLoginFirst = $false}
