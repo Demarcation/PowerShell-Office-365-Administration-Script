@@ -42,7 +42,7 @@ function global:start-login{
 	}
 	
 	#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
-	Import-Module $global:xLocalUserPath+"\MenuSystem.psm1"  -ErrorAction SilentlyContinue
+	Import-Module $global:xLocalUserPath"\MenuSystem.psm1"  -ErrorAction SilentlyContinue
 	$i = 0
 	while ((get-module -name MenuSystem) -eq $null) {
 		$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
