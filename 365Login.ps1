@@ -48,7 +48,7 @@ function global:start-login{
 		$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
 		$destination = $global:xLocalUserPath+"\MenuSystem.psm1"
 		Invoke-WebRequest $source -OutFile $destination
-		Import-Module $destination
+		if (test-path $destination) {Import-Module $destination} else {Return "Error Menu System Download Failed"}
 		if ((get-module -name MenuSystem) -ne $null) {fDisplayInfo -xText "Menu System Installed"} else { $i++; write-host "Loop "$i}
 		if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Menu System"}
 	}
@@ -60,7 +60,7 @@ function global:start-login{
 		$source = "http://download.microsoft.com/download/5/0/1/5017D39B-8E29-48C8-91A8-8D0E4968E6D4/en/msoidcli_64.msi" 
 		$destination = $global:xLocalUserPath+"\Microsoft Online Services Sign-In Assistant for IT Professionals RTW.msi"
 		Invoke-WebRequest $source -OutFile $destination
-		Invoke-Item $destination
+		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Online Services Sign-In Assistant Download Failed"}
 		if ((test-path $env:programfiles+'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
 			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	
 			$i++
@@ -77,7 +77,7 @@ function global:start-login{
 		$source = "https://bposast.vo.msecnd.net/MSOPMW/Current/amd64/AdministrationConfig-en.msi" 
 		$destination = $global:xLocalUserPath+"\Azure Active Directory Module for Windows PowerShell.msi"
 		Invoke-WebRequest $source -OutFile $destination
-		Invoke-Item $destination
+		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Azure Active Directory Module Download Failed"}
 		fDisplayInfo -xText "Please complete the setup before continuing" -xtime 5
 		pause
 		Import-Module MSOnline  -ErrorAction SilentlyContinue
