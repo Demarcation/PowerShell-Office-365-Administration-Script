@@ -139,9 +139,7 @@ PARAM(
 	$xAdminUser = $xAdminUser.adminuser
 	$global:xCompany = $global:csv | where-object {$_.company -eq $xCompany} | select company
 	$global:xCompany = $global:xCompany.company
-	$global:xDomain = $global:csv | where-object {$_.company -eq $xCompany} | select domain
-	$global:xDomain = $global:xDomain.domain
-	
+
 	$passfile = $global:xLocalUserPath+"\"+$global:xCompany+"365pass.txt"
 	if (test-path $passfile) {
 		} else {
