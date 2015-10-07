@@ -25,31 +25,31 @@
 		- BUG: Discovery Search Mailbox long name causes issues in show fowarding Status
 		- FEATURE: List all emails - Get-Recipient | Select Name -ExpandProperty EmailAddresses | Select Name,  SmtpAddress
 		- FEATURE: Find Specfic email - Get-Recipient | Select Name -ExpandProperty Emailaddresses | ?{ $_.Smtpaddress -eq $xFindAddress} | select name, smtpaddress
-		- FEATURE - COMPLETE: Add Shared Mailbox
-		- UPDATE - COMPLETE: Add New User now select from domain list rather than enter own UPN - Less chance of User Error
-		- FEATURE - COMPLETE: Show Mailbox Permissions
-		- FEATURE - COMPLETE: hide from gal mailbox and dist group
-		- FEATURE - COMPLETE: Forward Users Emails
-		- UPDATE - COMPLETE: Remove Discovery Search From results - where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} |
-		- FEATURE - COMPLETE - Guided Install of Dependancies for Script to run
+		- UPDATE - COMPLETE: Now allowing defined local user path to store downloads and encrypted passwords
 		######################################################################>
 
 # Control the login process ================================================================
-
+$global:xLocalUserPath = $env:UserProfile+"\Office365Data" #Define the local path to store user data in - Should NOT end with a '\'
 $ErrorActionPreference = 'Stop'
 
 function global:start-login{
 	$global:ForceLoginFirst = $true
 	
+	#If required create the user local path directory
+	if (test-path $global:xLocalUserPath) {} Else {
+		new-item $global:xLocalUserPath -type Directory
+		cls
+	}
+	
 	#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
-	Import-Module .\MenuSystem.psm1  -ErrorAction SilentlyContinue
+	Import-Module $global:xLocalUserPath+"\MenuSystem.psm1"  -ErrorAction SilentlyContinue
 	$i = 0
 	while ((get-module -name MenuSystem) -eq $null) {
 		$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
-		$destination = ".\MenuSystem.psm1"
+		$destination = $global:xLocalUserPath+"\MenuSystem.psm1"
 		Invoke-WebRequest $source -OutFile $destination
 		Import-Module $destination
-		if ((get-module -name MenuSystem) -ne $null) {fDisplayInfo -xText "Menu System Installed"} else {$i++}
+		if ((get-module -name MenuSystem) -ne $null) {fDisplayInfo -xText "Menu System Installed"} else { $i++; write-host "Loop "$i}
 		if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Menu System"}
 	}
 	
@@ -58,7 +58,7 @@ function global:start-login{
 	while ((test-path $env:programfiles'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
 		fDisplayInfo -xText "It appears you don't have Microsoft Online Services Sign-In Assistant for IT Professionals installed" -xText2 "Let's Install that now"
 		$source = "http://download.microsoft.com/download/5/0/1/5017D39B-8E29-48C8-91A8-8D0E4968E6D4/en/msoidcli_64.msi" 
-		$destination = "./Microsoft Online Services Sign-In Assistant for IT Professionals RTW.msi"
+		$destination = $global:xLocalUserPath+"\Microsoft Online Services Sign-In Assistant for IT Professionals RTW.msi"
 		Invoke-WebRequest $source -OutFile $destination
 		Invoke-Item $destination
 		if ((test-path $env:programfiles+'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
@@ -75,7 +75,7 @@ function global:start-login{
 	while ((Get-Module -Name MSOnline) -eq $null) {
 		fDisplayInfo -xText "It appears you don't have Azure Active Directory Module for Windows PowerShell installed" -xText2 "Let's Install that now" -xTime 3
 		$source = "https://bposast.vo.msecnd.net/MSOPMW/Current/amd64/AdministrationConfig-en.msi" 
-		$destination = "./Azure Active Directory Module for Windows PowerShell.msi"
+		$destination = $global:xLocalUserPath+"\Azure Active Directory Module for Windows PowerShell.msi"
 		Invoke-WebRequest $source -OutFile $destination
 		Invoke-Item $destination
 		fDisplayInfo -xText "Please complete the setup before continuing" -xtime 5
@@ -98,13 +98,24 @@ function global:start-login{
 
 function global:fLoginMenu{
 	# Requires a CSV File in with the columns company,adminuser
-	if (test-path Z:\~Tools\Powershell\companys.csv) {	
-		$global:csv = import-csv Z:\~Tools\Powershell\companys.csv
-	} else {
-		if (test-path c:\PowerShell\companys.csv) {
-			$global:csv = import-csv C:\PowerShell\companys.csv
-		}
+	if (test-path $global:xLocalUserPath) {} Else {
+		new-item $global:xLocalUserPath -type Directory
+	}	
+	
+	if (((test-path $global:xLocalUserPath'\companys.csv') -ne $true) -AND (test-path Z:\~Tools\Powershell\companys.csv) ) {	
+		#For Internal Use to move file to new location - This will be removed in later edition
+		copy Z:\~Tools\Powershell\companys.csv $global:xLocalUserPath'\companys.csv'
+	} elseif (((test-path $global:xLocalUserPath'\companys.csv') -ne $true) -AND ((test-path Z:\~Tools\Powershell\companys.csv) -ne $true) ) {
+		#else if the file is missing locally and on the share download the demo data from github
+		$source = "https://raw.githubusercontent.com/manicd/PowerShell-Office-365-Administration-Script/master/companys.csv"
+		$destination = $global:xLocalUserPath+"\companys.csv"
+		Invoke-WebRequest $source -OutFile $destination
+		fDisplayInfo -xText "Please edit the companys.csv file for your own use." -xText2 "At this time please ensure you do NOT include spaces in company names" -xText3 "Tip: Try using hypenated names instead e.g. Johns-Cleaning-Company " -xTime 5
+		Invoke-Item $destination
+		pause
 	}
+	
+	$global:csv = import-csv $global:xLocalUserPath'\companys.csv'
 	
 	#Create Hash Table Object	
 	$xMenuHash = New-Object System.Collections.HashTable
@@ -131,13 +142,13 @@ PARAM(
 	$global:xDomain = $global:csv | where-object {$_.company -eq $xCompany} | select domain
 	$global:xDomain = $global:xDomain.domain
 	
-	$passfile = "c:\O365\" + $global:xCompany + "365pass.txt"
+	$passfile = $global:xLocalUserPath+"\"+$global:xCompany+"365pass.txt"
 	if (test-path $passfile) {
 		} else {
 		$string = Read-Host "Enter the Password"
 		cls 
-		if (test-path c:\O365) {} Else {
-			new-item C:\O365 -type Directory
+		if (test-path $global:xLocalUserPath) {} Else {
+			new-item $global:xLocalUserPath -type Directory
 		}
 		fcreate-sstring $string | out-file $passfile 
 		if (test-path $passfile){
@@ -201,7 +212,7 @@ function global:fclear-login {
     }
 	
 function global:clear-passwords{
-	Remove-item C:\O365\* -confirm
+	Remove-item $global:xLocalUserPath+"\*" -confirm
 }	
 
 # Functions to run the Admin menu ============================================================
