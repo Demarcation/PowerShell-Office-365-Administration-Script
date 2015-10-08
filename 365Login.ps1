@@ -26,6 +26,7 @@
 		- FEATURE: List all emails - Get-Recipient | Select Name -ExpandProperty EmailAddresses | Select Name,  SmtpAddress
 		- FEATURE: Find Specfic email - Get-Recipient | Select Name -ExpandProperty Emailaddresses | ?{ $_.Smtpaddress -eq $xFindAddress} | select name, smtpaddress
 		- UPDATE - COMPLETE: Now allowing defined local user path to store downloads and encrypted passwords
+		- FEATURE - COMPLETE: fDidYouMean - Automatically suggests possible alternatives what you enter incorrect alias
 		######################################################################>
 
 # Control the login process ================================================================
@@ -42,9 +43,9 @@ function global:start-login{
 	}
 	
 	#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
-	Import-Module $global:xLocalUserPath"\MenuSystem.psm1"  -ErrorAction SilentlyContinue
+	Import-Module $global:xLocalUserPath"\MenuSystem.psm1"  -ErrorAction silentlycontinue
 	$i = 0
-	while ((get-module -name MenuSystem) -eq $null) {
+	while ((get-module -Name MenuSystem) -eq $null) {
 		$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
 		$destination = $global:xLocalUserPath+"\MenuSystem.psm1"
 		Invoke-WebRequest $source -OutFile $destination
@@ -105,6 +106,7 @@ function global:fLoginMenu{
 	if (((test-path $global:xLocalUserPath'\companys.csv') -ne $true) -AND (test-path Z:\~Tools\Powershell\companys.csv) ) {	
 		#For Internal Use to move file to new location - This will be removed in later edition
 		copy Z:\~Tools\Powershell\companys.csv $global:xLocalUserPath'\companys.csv'
+		copy c:\O365\* $global:xLocalUserPath
 	} elseif (((test-path $global:xLocalUserPath'\companys.csv') -ne $true) -AND ((test-path Z:\~Tools\Powershell\companys.csv) -ne $true) ) {
 		#else if the file is missing locally and on the share download the demo data from github
 		$source = "https://raw.githubusercontent.com/manicd/PowerShell-Office-365-Administration-Script/master/companys.csv"
@@ -139,7 +141,7 @@ PARAM(
 	$xAdminUser = $xAdminUser.adminuser
 	$global:xCompany = $global:csv | where-object {$_.company -eq $xCompany} | select company
 	$global:xCompany = $global:xCompany.company
-
+	
 	$passfile = $global:xLocalUserPath+"\"+$global:xCompany+"365pass.txt"
 	if (test-path $passfile) {
 		} else {
@@ -170,12 +172,11 @@ PARAM(
 [string]$xPass,
 [string]$xCompany
 )
-
-	# If username has been set, login
+ 	# If username has been set, login
     if ($xPass)	{
 		Write-host "Connecting to"$xCompany -Fore Green
 		Write-host "Creating Credential Object" -Fore Green
-		$O365Cred=New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $xAdminUser, ($xPass | ConvertTo-SecureString)
+		$global:O365Cred=New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $xAdminUser, ($xPass | ConvertTo-SecureString)
 		Write-host "Creating Session Object" -Fore Green
 		$O365Session = New-PSSession –ConfigurationName Microsoft.Exchange -ConnectionUri https://ps.outlook.com/powershell -Credential $O365Cred -Authentication Basic -AllowRedirection
 		write-host "Importing Session" -Fore Green
@@ -483,10 +484,27 @@ PARAM(
 			Return $false
 			# You must include if ($Var -eq $false) {Return $false} after calling the function to fully quit the function
 		} else 	{
-			fDisplayInfo -xText "Invalid Selection" -xColor "red"
+			fDisplayInfo -xText "Invalid Selection" -xColor "red" -xTime 1
+			fDidYouMean	-xInput $xInput
+			
 		}
 	}
 	Return $xVar
+}
+
+function global:fDidYouMean {
+PARAM(
+[string]$xInput
+)
+	fDisplayInfo -xText "Lets check if i can find that for you..."
+	$xPossible = get-recipient | ?{ ($_.Alias -match $xInput) -OR ($_.DisplayName -match $xInput) }
+	
+	if ($xPossible -ne $null) {
+	fDisplayInfo -xText "Did you mean one of these?"
+	write-host ($xPossible | ft DisplayName, Alias | out-string)
+	} else {
+	fDisplayInfo -xText "Sorry, I'm not sure who you mean, Try entering the alias again."
+	}
 }
 
 function global:fCollectAlias {		
