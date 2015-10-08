@@ -497,13 +497,30 @@ PARAM(
 [string]$xInput
 )
 	fDisplayInfo -xText "Lets check if i can find that for you..."
-	$xPossible = get-recipient | ?{ ($_.Alias -match $xInput) -OR ($_.DisplayName -match $xInput) }
+	$xGetRecipient = get-recipient
+	$xPossible = $xGetRecipient | ?{ ($_.Alias -match $xInput) -OR ($_.DisplayName -match $xInput) }
+	
+	if ($xPossible -eq $null) {
+		#if the first option fails, try searching just the first few char's of the string
+		$xPossible2 = $xGetRecipient | ?{ ($_.Alias -match $xInput.substring(0,5)) -OR ($_.DisplayName -match $xInput.substring(0,5)) } 
+	} 
+	if (($xPossible -eq $null) -and ($xPossible2 -eq $null)) {
+		#if that fails, try searching just the last few char's of the string
+		$xPossible3 = $xGetRecipient | ?{ ($_.Alias -match $xInput.substring($xInput.length - 5,5)) -OR ($_.DisplayName -match $xInput.substring($xInput.length - 5,5)) }
+	} 
+	
 	
 	if ($xPossible -ne $null) {
 	fDisplayInfo -xText "Did you mean one of these?"
 	write-host ($xPossible | ft DisplayName, Alias | out-string)
+	} elseif ($xPossible2 -ne $null) {
+	fDisplayInfo -xText "You might have meant one of these?"
+	write-host ($xPossible2 | ft DisplayName, Alias | out-string)
+	} elseif ($xPossible3 -ne $null) {
+	fDisplayInfo -xText "Maybe one of these is what your looking for?"
+	write-host ($xPossible3 | ft DisplayName, Alias | out-string)
 	} else {
-	fDisplayInfo -xText "Sorry, I'm not sure who you mean, Try entering the alias again."
+	fDisplayInfo -xText "Sorry, I'm not sure who you might mean, Try entering the alias again."
 	}
 }
 
