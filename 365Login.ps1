@@ -27,6 +27,7 @@
 		- FEATURE: Find Specfic email - Get-Recipient | Select Name -ExpandProperty Emailaddresses | ?{ $_.Smtpaddress -eq $xFindAddress} | select name, smtpaddress
 		- UPDATE - COMPLETE: Now allowing defined local user path to store downloads and encrypted passwords
 		- FEATURE - COMPLETE: fDidYouMean - Automatically suggests possible alternatives what you enter incorrect alias
+		- FEATURE: List all mailboxes a user has access to - get-mailboxpermission * -resultsize unlimited | ?{$_.user -match $xImput} | select Idenitity, AccessRights
 		######################################################################>
 
 # Control the login process ================================================================
@@ -43,12 +44,17 @@ function global:start-login{
 	}
 	
 	#This script requires the Multi Layered Dynamic Menu System Module from www.AshleyUnwin.com/Powershell_Multi_Layered_Dynamic_Menu_System
-	Import-Module $global:xLocalUserPath"\MenuSystem.psm1"  -ErrorAction silentlycontinue
+	Import-Module $global:xLocalUserPath"\MenuSystem.psm1" -ErrorAction silentlycontinue
 	$i = 0
 	while ((get-module -Name MenuSystem) -eq $null) {
 		$source = "https://raw.githubusercontent.com/manicd/Powershell-Multi-Layered-Dynamic-Menu-System/master/MenuSystem.psm1"
 		$destination = $global:xLocalUserPath+"\MenuSystem.psm1"
-		Invoke-WebRequest $source -OutFile $destination
+		if ($PSversiontable.PSVersion.Major -lt 3) {
+			$web=New-Object System.Net.WebClient
+			$web.DownloadFile($source,$destination)
+		} else {
+			Invoke-WebRequest $source -OutFile $destination
+		}
 		if (test-path $destination) {Import-Module $destination} else {Return "Error Menu System Download Failed"}
 		if ((get-module -name MenuSystem) -ne $null) {fDisplayInfo -xText "Menu System Installed"} else { $i++; write-host "Loop "$i}
 		if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Menu System"}
@@ -60,7 +66,12 @@ function global:start-login{
 		fDisplayInfo -xText "It appears you don't have Microsoft Online Services Sign-In Assistant for IT Professionals installed" -xText2 "Let's Install that now"
 		$source = "http://download.microsoft.com/download/5/0/1/5017D39B-8E29-48C8-91A8-8D0E4968E6D4/en/msoidcli_64.msi" 
 		$destination = $global:xLocalUserPath+"\Microsoft Online Services Sign-In Assistant for IT Professionals RTW.msi"
-		Invoke-WebRequest $source -OutFile $destination
+		if ($PSversiontable.PSVersion.Major -lt 3) {
+			$web=New-Object System.Net.WebClient
+			$web.DownloadFile($source,$destination)
+		} else {
+			Invoke-WebRequest $source -OutFile $destination
+		}
 		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Online Services Sign-In Assistant Download Failed"}
 		if ((test-path $env:programfiles+'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
 			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	
@@ -77,7 +88,12 @@ function global:start-login{
 		fDisplayInfo -xText "It appears you don't have Azure Active Directory Module for Windows PowerShell installed" -xText2 "Let's Install that now" -xTime 3
 		$source = "https://bposast.vo.msecnd.net/MSOPMW/Current/amd64/AdministrationConfig-en.msi" 
 		$destination = $global:xLocalUserPath+"\Azure Active Directory Module for Windows PowerShell.msi"
-		Invoke-WebRequest $source -OutFile $destination
+		if ($PSversiontable.PSVersion.Major -lt 3) {
+			$web=New-Object System.Net.WebClient
+			$web.DownloadFile($source,$destination)
+		} else {
+			Invoke-WebRequest $source -OutFile $destination
+		}
 		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Azure Active Directory Module Download Failed"}
 		fDisplayInfo -xText "Please complete the setup before continuing" -xtime 5
 		pause
@@ -498,15 +514,15 @@ PARAM(
 )
 	fDisplayInfo -xText "Lets check if i can find that for you..."
 	$xGetRecipient = get-recipient
-	$xPossible = $xGetRecipient | ?{ ($_.Alias -match $xInput) -OR ($_.DisplayName -match $xInput) }
+	$xPossible = $xGetRecipient | ?{ ($_.Alias -match $xInput) -OR ($_.DisplayName -match $xInput) } -ErrorAction silentlycontinue
 	
 	if ($xPossible -eq $null) {
 		#if the first option fails, try searching just the first few char's of the string
-		$xPossible2 = $xGetRecipient | ?{ ($_.Alias -match $xInput.substring(0,5)) -OR ($_.DisplayName -match $xInput.substring(0,5)) } 
+		$xPossible2 = $xGetRecipient | ?{ ($_.Alias -match $xInput.substring(0,5)) -OR ($_.DisplayName -match $xInput.substring(0,5)) }  -ErrorAction silentlycontinue
 	} 
 	if (($xPossible -eq $null) -and ($xPossible2 -eq $null)) {
 		#if that fails, try searching just the last few char's of the string
-		$xPossible3 = $xGetRecipient | ?{ ($_.Alias -match $xInput.substring($xInput.length - 5,5)) -OR ($_.DisplayName -match $xInput.substring($xInput.length - 5,5)) }
+		$xPossible3 = $xGetRecipient | ?{ ($_.Alias -match $xInput.substring($xInput.length - 5,5)) -OR ($_.DisplayName -match $xInput.substring($xInput.length - 5,5)) } -ErrorAction silentlycontinue
 	} 
 	
 	
