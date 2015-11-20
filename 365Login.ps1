@@ -28,10 +28,17 @@
 		- UPDATE - COMPLETE: Now allowing defined local user path to store downloads and encrypted passwords
 		- FEATURE - COMPLETE: fDidYouMean - Automatically suggests possible alternatives what you enter incorrect alias
 		- FEATURE: List all mailboxes a user has access to - get-mailboxpermission * -resultsize unlimited | ?{$_.user -match $xImput} | select Idenitity, AccessRights
+		- UPDATE: Need to change disable mailbox services to toggle mailbox services
+		- Feature: check who has access to mailbox
+		- Feature: make exchange on-site compatible
+		- UPDATE: add new dist group, offer option in exteral or internal
+		- BUG STATUS-FIXED: Remove Dist Group Member Failed when two objects that had SIMELAR idenitities were involved (e.g. 'david' and 'David smith') - isolated down to specific output as specified by menu output (Get-Recipient $xMember | ?{ $_.Identity -eq $xMember })
+		- UPDATE: Export to CSV in several list functions
 		######################################################################>
 
 # Control the login process ================================================================
 $global:xLocalUserPath = $env:UserProfile+"\Office365Data" #Define the local path to store user data in - Should NOT end with a '\'
+$global:xCompanyFilePath = "Z:\~Tools\Powershell\company.csv"
 $ErrorActionPreference = 'Stop'
 
 function global:start-login{
@@ -60,52 +67,7 @@ function global:start-login{
 		if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Menu System"}
 	}
 	
-	#This script requires Microsoft Online Services Sign-In Assistant for IT Professionals installed
-	$i = 0
-	while ((test-path $env:programfiles'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
-		fDisplayInfo -xText "It appears you don't have Microsoft Online Services Sign-In Assistant for IT Professionals installed" -xText2 "Let's Install that now"
-		$source = "http://download.microsoft.com/download/5/0/1/5017D39B-8E29-48C8-91A8-8D0E4968E6D4/en/msoidcli_64.msi" 
-		$destination = $global:xLocalUserPath+"\Microsoft Online Services Sign-In Assistant for IT Professionals RTW.msi"
-		if ($PSversiontable.PSVersion.Major -lt 3) {
-			$web=New-Object System.Net.WebClient
-			$web.DownloadFile($source,$destination)
-		} else {
-			Invoke-WebRequest $source -OutFile $destination
-		}
-		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Online Services Sign-In Assistant Download Failed"}
-		if ((test-path $env:programfiles+'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
-			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	
-			$i++
-			if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Microsoft Online Services Sign-In Assistant"}
-			pause
-		}
-	}
-	
-	#This script requires Azure Active Directory Module for Windows PowerShell installed
-	Import-Module MSOnline -ErrorAction SilentlyContinue
-	$i = 0
-	while ((Get-Module -Name MSOnline) -eq $null) {
-		fDisplayInfo -xText "It appears you don't have Azure Active Directory Module for Windows PowerShell installed" -xText2 "Let's Install that now" -xTime 3
-		$source = "https://bposast.vo.msecnd.net/MSOPMW/Current/amd64/AdministrationConfig-en.msi" 
-		$destination = $global:xLocalUserPath+"\Azure Active Directory Module for Windows PowerShell.msi"
-		if ($PSversiontable.PSVersion.Major -lt 3) {
-			$web=New-Object System.Net.WebClient
-			$web.DownloadFile($source,$destination)
-		} else {
-			Invoke-WebRequest $source -OutFile $destination
-		}
-		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Azure Active Directory Module Download Failed"}
-		fDisplayInfo -xText "Please complete the setup before continuing" -xtime 5
-		pause
-		Import-Module MSOnline  -ErrorAction SilentlyContinue
-		if ((Get-Module -Name MSOnline) -eq $null) {
-			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	-xTime 3
-			$i++
-			if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Azure Active Directory Module"}
-			pause
-		}
 		
-	}		
 		
 
 	fClear-Login
@@ -157,6 +119,8 @@ PARAM(
 	$xAdminUser = $xAdminUser.adminuser
 	$global:xCompany = $global:csv | where-object {$_.company -eq $xCompany} | select company
 	$global:xCompany = $global:xCompany.company
+	$global:xService = $global:csv | where-object {$_.company -eq $xCompany} | select Service
+	$global:xService = $global:xService.Service
 	
 	$passfile = $global:xLocalUserPath+"\"+$global:xCompany+"365pass.txt"
 	if (test-path $passfile) {
@@ -178,6 +142,7 @@ PARAM(
 	$xReturn.add("xAdminUser", $xAdminUser)
 	$xReturn.add("xPass",$xPass)
 	$xReturn.add("xCompany",$xCompany)
+	$xReturn.add("xService",$xService)
 	return $xReturn
 }
 
@@ -188,17 +153,65 @@ PARAM(
 [string]$xPass,
 [string]$xCompany
 )
+	
+	#This script requires Microsoft Online Services Sign-In Assistant for IT Professionals installed
+	$i = 0
+	while ((test-path $env:programfiles'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
+		fDisplayInfo -xText "It appears you don't have Microsoft Online Services Sign-In Assistant for IT Professionals installed" -xText2 "Let's Install that now"
+		$source = "http://download.microsoft.com/download/5/0/1/5017D39B-8E29-48C8-91A8-8D0E4968E6D4/en/msoidcli_64.msi" 
+		$destination = $global:xLocalUserPath+"\Microsoft Online Services Sign-In Assistant for IT Professionals RTW.msi"
+		if ($PSversiontable.PSVersion.Major -lt 3) {
+			$web=New-Object System.Net.WebClient
+			$web.DownloadFile($source,$destination)
+		} else {
+			Invoke-WebRequest $source -OutFile $destination
+		}
+		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Online Services Sign-In Assistant Download Failed"}
+		if ((test-path $env:programfiles+'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
+			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	
+			$i++
+			if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Microsoft Online Services Sign-In Assistant"}
+			pause
+		}
+	}
+	
+	#This script requires Azure Active Directory Module for Windows PowerShell installed
+	Import-Module MSOnline -ErrorAction SilentlyContinue
+	$i = 0
+	while ((Get-Module -Name MSOnline) -eq $null) {
+		fDisplayInfo -xText "It appears you don't have Azure Active Directory Module for Windows PowerShell installed" -xText2 "Let's Install that now" -xTime 3
+		$source = "https://bposast.vo.msecnd.net/MSOPMW/Current/amd64/AdministrationConfig-en.msi" 
+		$destination = $global:xLocalUserPath+"\Azure Active Directory Module for Windows PowerShell.msi"
+		if ($PSversiontable.PSVersion.Major -lt 3) {
+			$web=New-Object System.Net.WebClient
+			$web.DownloadFile($source,$destination)
+		} else {
+			Invoke-WebRequest $source -OutFile $destination
+		}
+		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Azure Active Directory Module Download Failed"}
+		fDisplayInfo -xText "Please complete the setup before continuing" -xtime 5
+		pause
+		Import-Module MSOnline  -ErrorAction SilentlyContinue
+		if ((Get-Module -Name MSOnline) -eq $null) {
+			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	-xTime 3
+			$i++
+			if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Azure Active Directory Module"}
+			pause
+		}
+		
+	}
+	
  	# If username has been set, login
     if ($xPass)	{
 		Write-host "Connecting to"$xCompany -Fore Green
 		Write-host "Creating Credential Object" -Fore Green
-		$global:O365Cred=New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $xAdminUser, ($xPass | ConvertTo-SecureString)
+		$global:O365Cred=New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $xAdminUser, ($xPass | ConvertTo-SecureString) -ErrorAction stop
 		Write-host "Creating Session Object" -Fore Green
-		$O365Session = New-PSSession –ConfigurationName Microsoft.Exchange -ConnectionUri https://ps.outlook.com/powershell -Credential $O365Cred -Authentication Basic -AllowRedirection
+		$O365Session = New-PSSession –ConfigurationName Microsoft.Exchange -ConnectionUri https://ps.outlook.com/powershell -Credential $O365Cred -Authentication Basic -AllowRedirection -ErrorAction stop
 		write-host "Importing Session" -Fore Green
-		Import-PSSession $O365Session
+		Import-PSSession $O365Session -ErrorAction stop
 		write-host "Connecting to MSOL Service" -Fore Green
-		Connect-MsolService –Credential $O365Cred
+		Connect-MsolService –Credential $O365Cred -ErrorAction stop
 		cls
 		write-host "`nYou are now logged in to"$xCompany". Type 'Use-Admin' to access the menu." -Fore Green
 	}else{
@@ -337,10 +350,11 @@ function global:Use-Admin {
 										"List Mailboxes"="fListMailboxes"
 										"List Mailbox Statistics"="fListMailboxStats"
 										"List Email Forwarding Status"="fCheckForwarding"
-										"Disable Access to Services"=@{	"Disable Outlook Anywhere Access"="fDisableOutlookAnywhere"
-																		"Disable OWA Access"="fDisableOWA"
-																		"Disable IMAP Access"="fDisableImap"
-																		"Disable POP Access"="fDisablePop"
+										"Toggle Access to Services"=@{	"Toggle MAPI Access"="fToggleMAPI"
+																		"Toggle OWA Access"="fToggleOWA"
+																		"Toggle IMAP Access"="fToggleImap"
+																		"Toggle POP Access"="fTogglePop"
+																		"Toggle ActiveSync"="fToggleActiveSync"
 																		}
 										"Hide/Unhide from GAL"="fToggleMailboxHideFromGAL"
 										"Email Alias for Mailboxes"=@{
@@ -662,8 +676,17 @@ function global:fAddNewUser {
 }
 
 function global:fListUsers {
-	write-host (get-msoluser | format-table | out-string)
-	pause
+
+	$xUserList = get-msoluser
+	write-host ($xUserList | format-table | out-string)
+	
+	$xExpCSV = read-host "Would you like to export this as CSV? (y/n)"
+	if ($xExpCSV -eq "y") {
+		$xUserList | export-csv $xLocalUserPath"\UserList.csv"
+		write-host "Generating CSV, Please Wait..."
+		timeout 5
+		Invoke-item $xLocalUserPath"\UserList.csv"
+	}
 }
 
 function global:fEditUserAccountName {
@@ -752,13 +775,34 @@ function global:fRemoveFullAccessMailbox {
 }
 
 function global:fListMailboxes {
-	write-host (get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | format-table | out-string)
-	pause
+	
+	$xMList = get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'}
+	
+	write-host ( $xMList | format-table | out-string)
+	
+	$xExpCSV = read-host "Would you like to export this as CSV? (y/n)"
+	if ($xExpCSV -eq "y") {
+		$xMList | export-csv $xLocalUserPath"\MailboxList.csv"
+		write-host "Generating CSV, Please Wait..."
+		timeout 5
+		Invoke-item $xLocalUserPath"\MailboxList.csv"
+	}
 }
 
 function global:fListMailboxStats {
-	write-host (get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }  | format-table | out-string)
-	pause
+	
+	Write-host "Generating Statistics, Please Wait..."
+	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }
+	write-host ( $xMStats  | format-table | out-string)
+		
+	$xExpCSV = read-host "Would you like to export this as CSV? (y/n)"
+	if ($xExpCSV -eq "y") {
+		$xMStats | export-csv $xLocalUserPath"\MailboxStatistics.csv"
+		write-host "Generating CSV, Please Wait..."
+		timeout 5
+		Invoke-item $xLocalUserPath"\MailboxStatistics.csv"
+	}
+
 }
 
 function global:fCheckForwarding {
@@ -950,87 +994,239 @@ function global:fShowMailboxPerms {
 
 #Mailbox Services =======================================================================================
 
-function global:fDisableOutlookAnywhere {
- 	fDisplayInfo -text "Disable Outlook Anywhere"
+function global:fToggleMAPI {
+ 	fDisplayInfo -xtext "Toggle MAPI Access"
 	while (!$xIdentity) {
-		$xInput = fUserPrompt -xQuestion "Enter User ID. (Type 'ALL' to set globally or type 'QUIT' to exit)"
-		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "all")) {
+		$xInput = fUserPrompt -xQuestion "Enter either a User ID, 'EnableAll', 'DisableAll' or 'Quit'"
+		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "enableall") -OR ($xInput -eq "disableall")) {
 			$xIdentity = $xInput
 			remove-variable -name xInput
 		} elseif ($xInput -eq "quit") {
 			Return
 		} else 	{
-			fDisplayInfo -Text "Invalid Selection" -xColour "red"
+			fDisplayInfo -xText "Invalid Selection" -xColour "red"
 		}
 	}
-	if ($xIdentity -eq "all") {
-		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -MAPIEnabled $False
-	} else {
-		Set-CASMailbox -identity $xIdentity -MAPIEnabled $False
-	}
-	pause	
-}
-
-function global:fDisableOWA {
- 	fDisplayInfo -text "Disable Outlook Web Access"
 	
-	$xIdentity = fCollectIdentity -xText "Enter User ID: (Type 'All' to select globally)"
-	if ($xIdentity -eq $false) {Return $false}
+		
+	if ($xIdentity -eq "disableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -MAPIenabled $False
+		write-host (get-casmailbox | select name, MAPIenabled | ft | out-string)
+	} elseif ($xIdentity -eq "enableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -MAPIenabled $true
+		write-host (get-casmailbox | select name, MAPIenabled | ft | out-string)
+	} else {
 	
-	if ($xIdentity -eq "all") {
-		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -ActiveSyncEnabled $False
-		write-host (get-casmailbox | format-list | out-string) 
-	} else {
-		Set-CASMailbox -identity $xIdentity -ActiveSyncEnabled $False
-		write-host (get-casmailbox -identity $xIdentity | format-list | out-string) 
+		write-host (get-casmailbox -identity $xIdentity | select name, MAPIenabled | ft | out-string)
+		
+		if ((get-casmailbox $xIdentity | select MAPIenabled).MAPIenabled -eq $true) {
+			$xToggle = read-host "Would you like to disable MAPI Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -MAPIenabled $False
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		} elseif ((get-casmailbox $xIdentity | select MAPIenabled).MAPIenabled -eq $false) {
+			$xToggle = read-host "Would you like to enable MAPI Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -MAPIenabled $true
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		}
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, MAPIenabled | ft | out-string)
+		pause
+		
 	}	
-	pause
 }
 
-function global:fDisableImap {
- 	fDisplayInfo -text "Disable IMAP Access"
+function global:fToggleActiveSync {
+ 	fDisplayInfo -xtext "Toggle ActiveSync Access"
 	while (!$xIdentity) {
-		$xInput = fUserPrompt -xQuestion "Enter User ID. (Type 'ALL' to set globally or type 'QUIT' to exit)"
-		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "all")) {
+		$xInput = fUserPrompt -xQuestion "Enter either a User ID, 'EnableAll', 'DisableAll' or 'Quit'"
+		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "enableall") -OR ($xInput -eq "disableall")) {
 			$xIdentity = $xInput
 			remove-variable -name xInput
 		} elseif ($xInput -eq "quit") {
 			Return
 		} else 	{
-			fDisplayInfo -Text "Invalid Selection" -xColour "red"
+			fDisplayInfo -xText "Invalid Selection" -xColour "red"
 		}
 	}
-	if ($xIdentity -eq "all") {
-		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -imapenabled $False 
-		write-host (get-casmailbox | format-list | out-string) 
+	
+		
+	if ($xIdentity -eq "disableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -ActiveSyncenabled $False
+		write-host (get-casmailbox | select name, ActiveSyncenabled | ft | out-string)
+	} elseif ($xIdentity -eq "enableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -ActiveSyncenabled $true
+		write-host (get-casmailbox | select name, ActiveSyncenabled | ft | out-string)
 	} else {
-		Set-CASMailbox -identity $xIdentity -imapenabled $False 
-		write-host (get-casmailbox -identity $xIdentity | format-list | out-string) 
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, ActiveSyncenabled | ft | out-string)
+		
+		if ((get-casmailbox $xIdentity | select ActiveSyncenabled).ActiveSyncenabled -eq $true) {
+			$xToggle = read-host "Would you like to disable ActiveSync Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -ActiveSyncenabled $False
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		} elseif ((get-casmailbox $xIdentity | select ActiveSyncenabled).ActiveSyncenabled -eq $false) {
+			$xToggle = read-host "Would you like to enable ActiveSync Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -ActiveSyncenabled $true
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		}
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, ActiveSyncenabled | ft | out-string)
+		pause
+		
 	}	
-	pause
 }
 
-function global:fDisablePop {
- 	fDisplayInfo -text "Disable POP Access"
+function global:fToggleOWA {
+ 	fDisplayInfo -xtext "Toggle OWA Access"
 	while (!$xIdentity) {
-		$xInput = fUserPrompt -xQuestion "Enter User ID. (Type 'ALL' to set globally or type 'QUIT' to exit)"
-		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "all")) {
+		$xInput = fUserPrompt -xQuestion "Enter either a User ID, 'EnableAll', 'DisableAll' or 'Quit'"
+		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "enableall") -OR ($xInput -eq "disableall")) {
 			$xIdentity = $xInput
 			remove-variable -name xInput
 		} elseif ($xInput -eq "quit") {
 			Return
 		} else 	{
-			fDisplayInfo -Text "Invalid Selection" -xColour "red"
+			fDisplayInfo -xText "Invalid Selection" -xColour "red"
 		}
 	}
-	if ($xIdentity -eq "all") {
+	
+		
+	if ($xIdentity -eq "disableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -OWAenabled $False
+		write-host (get-casmailbox | select name, OWAenabled | ft | out-string)
+	} elseif ($xIdentity -eq "enableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -OWAenabled $true
+		write-host (get-casmailbox | select name, OWAenabled | ft | out-string)
+	} else {
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, OWAenabled | ft | out-string)
+		
+		if ((get-casmailbox $xIdentity | select OWAenabled).OWAenabled -eq $true) {
+			$xToggle = read-host "Would you like to disable OWA Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -OWAenabled $False
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		} elseif ((get-casmailbox $xIdentity | select OWAenabled).OWAenabled -eq $false) {
+			$xToggle = read-host "Would you like to enable OWA Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -OWAenabled $true
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		}
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, OWAenabled | ft | out-string)
+		pause
+		
+	}	
+}
+
+function global:fToggleImap {
+ 	fDisplayInfo -xtext "Toggle IMAP Access"
+	while (!$xIdentity) {
+		$xInput = fUserPrompt -xQuestion "Enter either a User ID, 'EnableAll', 'DisableAll' or 'Quit'"
+		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "enableall") -OR ($xInput -eq "disableall")) {
+			$xIdentity = $xInput
+			remove-variable -name xInput
+		} elseif ($xInput -eq "quit") {
+			Return
+		} else 	{
+			fDisplayInfo -xText "Invalid Selection" -xColour "red"
+		}
+	}
+	
+		
+	if ($xIdentity -eq "disableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -imapenabled $False
+		write-host (get-casmailbox | select name, imapenabled | ft | out-string)
+	} elseif ($xIdentity -eq "enableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -imapenabled $true
+		write-host (get-casmailbox | select name, imapenabled | ft | out-string)
+	} else {
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, imapenabled | ft | out-string)
+		
+		if ((get-casmailbox $xIdentity | select imapenabled).imapenabled -eq $true) {
+			$xToggle = read-host "Would you like to disable IMAP Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -imapenabled $False
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		} elseif ((get-casmailbox $xIdentity | select imapenabled).imapenabled -eq $false) {
+			$xToggle = read-host "Would you like to enable IMAP Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -imapenabled $true
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		}
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, imapenabled | ft | out-string)
+		pause
+		
+	}	
+}
+
+function global:fTogglePop {
+ 	fDisplayInfo -xtext "Toggle POP Access"
+	while (!$xIdentity) {
+		$xInput = fUserPrompt -xQuestion "Enter either a User ID, 'EnableAll', 'DisableAll' or 'Quit'"
+		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "enableall") -OR ($xInput -eq "disableall")) {
+			$xIdentity = $xInput
+			remove-variable -name xInput
+		} elseif ($xInput -eq "quit") {
+			Return
+		} else 	{
+			fDisplayInfo -xText "Invalid Selection" -xColour "red"
+		}
+	}
+	
+		
+	if ($xIdentity -eq "disableall") {
 		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -popenabled $False
-		write-host (get-casmailbox | format-list | out-string)
+		write-host (get-casmailbox | select name, popenabled | ft | out-string)
+	} elseif ($xIdentity -eq "enableall") {
+		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -popenabled $true
+		write-host (get-casmailbox | select name, popenabled | ft | out-string)
 	} else {
-		Set-CASMailbox -identity $xIdentity -popenabled $False
-		write-host (get-casmailbox -identity $xIdentity | format-list | out-string)
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, popenabled | ft | out-string)
+		
+		if ((get-casmailbox $xIdentity | select popenabled).popenabled -eq $true) {
+			$xToggle = read-host "Would you like to disable Pop Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -popenabled $False
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		} elseif ((get-casmailbox $xIdentity | select popenabled).popenabled -eq $false) {
+			$xToggle = read-host "Would you like to enable Pop Access? (y/n)"
+			if ($xToggle -eq "y") {
+				Set-CASMailbox -identity $xIdentity -popenabled $true
+			} else {
+				fDisplayInfo -xText "No changes have been made"
+			}
+		}
+	
+		write-host (get-casmailbox -identity $xIdentity | select name, popenabled | ft | out-string)
+		pause
+		
 	}	
-	pause
 }
 
 #Dist Groups =======================================================================================
@@ -1041,7 +1237,9 @@ PARAM(
 )
 	if (!$xGroupName) {
 		Get-DistributionGroup | sort DisplayName | foreach-object {
-			Write-host $($_.Displayname)"`n===========" 
+			Write-host $($_.Displayname)
+			if ($($_.RequireSenderAuthenticationEnabled) -eq $true) {Write-host "*Internal Emails Only*"}
+			write-host "===========" 
 			Get-DistributionGroupMember $($_.DisplayName) | foreach-object {
 				write-host $_.DisplayName
 			}
@@ -1142,6 +1340,7 @@ function global:fAddNewDistGroup {
 	
 	Write-Host (get-DistributionGroup -Identity $xGroupName | format-table | out-string)
 	fStoreMainMenu -xRestore 1
+	fAddUserDistGroup
 	pause
 }
 
