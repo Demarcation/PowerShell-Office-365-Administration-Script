@@ -25,15 +25,10 @@
 		- BUG: Discovery Search Mailbox long name causes issues in show fowarding Status
 		- FEATURE: List all emails - Get-Recipient | Select Name -ExpandProperty EmailAddresses | Select Name,  SmtpAddress
 		- FEATURE: Find Specfic email - Get-Recipient | Select Name -ExpandProperty Emailaddresses | ?{ $_.Smtpaddress -eq $xFindAddress} | select name, smtpaddress
-		- UPDATE - COMPLETE: Now allowing defined local user path to store downloads and encrypted passwords
-		- FEATURE - COMPLETE: fDidYouMean - Automatically suggests possible alternatives what you enter incorrect alias
 		- FEATURE: List all mailboxes a user has access to - get-mailboxpermission * -resultsize unlimited | ?{$_.user -match $xImput} | select Idenitity, AccessRights
-		- UPDATE: Need to change disable mailbox services to toggle mailbox services
 		- Feature: check who has access to mailbox
 		- Feature: make exchange on-site compatible
 		- UPDATE: add new dist group, offer option in exteral or internal
-		- BUG STATUS-FIXED: Remove Dist Group Member Failed when two objects that had SIMELAR idenitities were involved (e.g. 'david' and 'David smith') - isolated down to specific output as specified by menu output (Get-Recipient $xMember | ?{ $_.Identity -eq $xMember })
-		- UPDATE: Export to CSV in several list functions
 		######################################################################>
 
 # Control the login process ================================================================
@@ -125,7 +120,7 @@ PARAM(
 	$passfile = $global:xLocalUserPath+"\"+$global:xCompany+"365pass.txt"
 	if (test-path $passfile) {
 		} else {
-		$string = Read-Host "Enter the Password"
+		$string = fUserPrompt -xQuestion "Enter the Password"
 		cls 
 		if (test-path $global:xLocalUserPath) {} Else {
 			new-item $global:xLocalUserPath -type Directory
@@ -680,7 +675,7 @@ function global:fListUsers {
 	$xUserList = get-msoluser
 	write-host ($xUserList | format-table | out-string)
 	
-	$xExpCSV = read-host "Would you like to export this as CSV? (y/n)"
+	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
 	if ($xExpCSV -eq "y") {
 		$xUserList | export-csv $xLocalUserPath"\UserList.csv"
 		write-host "Generating CSV, Please Wait..."
@@ -741,6 +736,22 @@ function global:fAddMailboxFolderPerm {
 	fStoreMainMenu -xRestore 1
 }
 
+function global:fRemoveMailboxFolderPerm {
+	cls
+	$xUser = fCollectIdentity -xText "Enter the User who would like the access"
+	if ($xUser -eq $false) {Return $false}
+	$xMailbox = fCollectIdentity -xText "Enter the Mailbox they would like access to"
+	if ($xMailbox -eq $false) {Return $false}
+	$xFolder = fUserPrompt -xQuestion "Enter the Folder the would no longer like access to"
+	$xIdString = $xMailbox+":\"+$xFolder
+	cls
+	$xTextString = "Removing "+$xUser+" from "+$xFolder+" in "+$xMailbox+"'s Mailbox" 
+	fDisplayInfo -xText $xTextString
+	Remove-MailboxFolderPermission -Identity $xIdString -User $xUser
+	write-host (get-MailboxFolderPermission -Identity $xIdString -User $xUser | Format-Table | out-string)
+	pause
+}
+
 function global:fGrantFullAccessMailbox {
 	
 	$xUser = fCollectIdentity -xText "Enter the User who would like the access"
@@ -780,7 +791,7 @@ function global:fListMailboxes {
 	
 	write-host ( $xMList | format-table | out-string)
 	
-	$xExpCSV = read-host "Would you like to export this as CSV? (y/n)"
+	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
 	if ($xExpCSV -eq "y") {
 		$xMList | export-csv $xLocalUserPath"\MailboxList.csv"
 		write-host "Generating CSV, Please Wait..."
@@ -795,7 +806,7 @@ function global:fListMailboxStats {
 	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }
 	write-host ( $xMStats  | format-table | out-string)
 		
-	$xExpCSV = read-host "Would you like to export this as CSV? (y/n)"
+	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
 	if ($xExpCSV -eq "y") {
 		$xMStats | export-csv $xLocalUserPath"\MailboxStatistics.csv"
 		write-host "Generating CSV, Please Wait..."
@@ -1020,14 +1031,14 @@ function global:fToggleMAPI {
 		write-host (get-casmailbox -identity $xIdentity | select name, MAPIenabled | ft | out-string)
 		
 		if ((get-casmailbox $xIdentity | select MAPIenabled).MAPIenabled -eq $true) {
-			$xToggle = read-host "Would you like to disable MAPI Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to disable MAPI Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -MAPIenabled $False
 			} else {
 				fDisplayInfo -xText "No changes have been made"
 			}
 		} elseif ((get-casmailbox $xIdentity | select MAPIenabled).MAPIenabled -eq $false) {
-			$xToggle = read-host "Would you like to enable MAPI Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to enable MAPI Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -MAPIenabled $true
 			} else {
@@ -1067,14 +1078,14 @@ function global:fToggleActiveSync {
 		write-host (get-casmailbox -identity $xIdentity | select name, ActiveSyncenabled | ft | out-string)
 		
 		if ((get-casmailbox $xIdentity | select ActiveSyncenabled).ActiveSyncenabled -eq $true) {
-			$xToggle = read-host "Would you like to disable ActiveSync Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to disable ActiveSync Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -ActiveSyncenabled $False
 			} else {
 				fDisplayInfo -xText "No changes have been made"
 			}
 		} elseif ((get-casmailbox $xIdentity | select ActiveSyncenabled).ActiveSyncenabled -eq $false) {
-			$xToggle = read-host "Would you like to enable ActiveSync Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to enable ActiveSync Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -ActiveSyncenabled $true
 			} else {
@@ -1114,14 +1125,14 @@ function global:fToggleOWA {
 		write-host (get-casmailbox -identity $xIdentity | select name, OWAenabled | ft | out-string)
 		
 		if ((get-casmailbox $xIdentity | select OWAenabled).OWAenabled -eq $true) {
-			$xToggle = read-host "Would you like to disable OWA Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to disable OWA Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -OWAenabled $False
 			} else {
 				fDisplayInfo -xText "No changes have been made"
 			}
 		} elseif ((get-casmailbox $xIdentity | select OWAenabled).OWAenabled -eq $false) {
-			$xToggle = read-host "Would you like to enable OWA Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to enable OWA Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -OWAenabled $true
 			} else {
@@ -1161,14 +1172,14 @@ function global:fToggleImap {
 		write-host (get-casmailbox -identity $xIdentity | select name, imapenabled | ft | out-string)
 		
 		if ((get-casmailbox $xIdentity | select imapenabled).imapenabled -eq $true) {
-			$xToggle = read-host "Would you like to disable IMAP Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to disable IMAP Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -imapenabled $False
 			} else {
 				fDisplayInfo -xText "No changes have been made"
 			}
 		} elseif ((get-casmailbox $xIdentity | select imapenabled).imapenabled -eq $false) {
-			$xToggle = read-host "Would you like to enable IMAP Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to enable IMAP Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -imapenabled $true
 			} else {
@@ -1208,14 +1219,14 @@ function global:fTogglePop {
 		write-host (get-casmailbox -identity $xIdentity | select name, popenabled | ft | out-string)
 		
 		if ((get-casmailbox $xIdentity | select popenabled).popenabled -eq $true) {
-			$xToggle = read-host "Would you like to disable Pop Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to disable Pop Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -popenabled $False
 			} else {
 				fDisplayInfo -xText "No changes have been made"
 			}
 		} elseif ((get-casmailbox $xIdentity | select popenabled).popenabled -eq $false) {
-			$xToggle = read-host "Would you like to enable Pop Access? (y/n)"
+			$xToggle = fUserPrompt -xQuestion "Would you like to enable Pop Access? (y/n)"
 			if ($xToggle -eq "y") {
 				Set-CASMailbox -identity $xIdentity -popenabled $true
 			} else {
@@ -1251,22 +1262,6 @@ PARAM(
 		write-host (Get-DistributionGroupMember $xGroupName | select DisplayName | format-table | out-string)
 	}	
 	
-}
-
-function global:fRemoveMailboxFolderPerm {
-	cls
-	$xUser = fCollectIdentity -xText "Enter the User who would like the access"
-	if ($xUser -eq $false) {Return $false}
-	$xMailbox = fCollectIdentity -xText "Enter the Mailbox they would like access to"
-	if ($xMailbox -eq $false) {Return $false}
-	$xFolder = fUserPrompt -xQuestion "Enter the Folder the would no longer like access to"
-	$xIdString = $xMailbox+":\"+$xFolder
-	cls
-	$xTextString = "Removing "+$xUser+" from "+$xFolder+" in "+$xMailbox+"'s Mailbox" 
-	fDisplayInfo -xText $xTextString
-	Remove-MailboxFolderPermission -Identity $xIdString -User $xUser
-	write-host (get-MailboxFolderPermission -Identity $xIdString -User $xUser | Format-Table | out-string)
-	pause
 }
 
 function global:fAddUserDistGroup {
@@ -1318,8 +1313,8 @@ function global:fRemoveUserDistGroup {
 
 function global:fAddNewDistGroup {
 	fStoreMainMenu -xRestore 0
-	$xgroupname = fUserPrompt -xQuestion "Enter the Alias: "  
-		
+	$xgroupname = fUserPrompt -xQuestion "Enter the group alias: "  
+			
 	function global:fNewDistGroup {
 	PARAM(
 	[string]$xGroupName,
@@ -1336,12 +1331,17 @@ function global:fAddNewDistGroup {
 			$xMenuHash.add($_.Name,"fNewDistGroup -xGroupName "+$xGroupName+" -xSelectedDomain "+$_.Name)
 		}
 	#Call the Menu	
-	use-menu -MenuHash $xMenuHash -Title "Select Domain" -NoSplash $True
+	$xvar = use-menu -MenuHash $xMenuHash -Title "Select Domain" -NoSplash $True
 	
-	Write-Host (get-DistributionGroup -Identity $xGroupName | format-table | out-string)
+	$xDisExtAcc = fUserPrompt -xQuestion "Would you like to disable external mail to this address? (y/n)" 
+	if ($xDisExtAcc -eq "y") { Set-DistributionGroup -Identity $xGroupName -RequireSenderAuthenticationEnabled $true }
+	
+	Write-Host (get-DistributionGroup -Identity $xGroupName | select Name, RequireSenderAuthenticationEnabled, PrimarySmtpAddress | format-table | out-string)
+	remove-variable xgroupname, xmenuhash, xvar, xDisExtAcc
 	fStoreMainMenu -xRestore 1
-	fAddUserDistGroup
+	fDisplayInfo -xText "You will now be taken to add new members to the group"
 	pause
+	fAddUserDistGroup
 }
 
 function global:fAddDistGroupEmailAlias {
