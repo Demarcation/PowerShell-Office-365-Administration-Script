@@ -29,6 +29,7 @@
 		- Feature: check who has access to mailbox
 		- Feature: make exchange on-site compatible
 		- UPDATE: add new dist group, offer option in exteral or internal
+		- Feature: Toggle Clutter settings
 		######################################################################>
 
 # Control the login process ================================================================
@@ -345,7 +346,8 @@ function global:Use-Admin {
 										"List Mailboxes"="fListMailboxes"
 										"List Mailbox Statistics"="fListMailboxStats"
 										"List Email Forwarding Status"="fCheckForwarding"
-										"Toggle Access to Services"=@{	"Toggle MAPI Access"="fToggleMAPI"
+										"Toggle Access to Services"=@{	"Display Mailbox Access Status"="fDisplayCASMailboxStatus"
+																		"Toggle MAPI Access"="fToggleMAPI"
 																		"Toggle OWA Access"="fToggleOWA"
 																		"Toggle IMAP Access"="fToggleImap"
 																		"Toggle POP Access"="fTogglePop"
@@ -522,7 +524,7 @@ PARAM(
 [string]$xInput
 )
 	fDisplayInfo -xText "Lets check if i can find that for you..."
-	$xGetRecipient = get-recipient
+	$xGetRecipient = get-recipient *
 	$xPossible = $xGetRecipient | ?{ ($_.Alias -match $xInput) -OR ($_.DisplayName -match $xInput) } -ErrorAction silentlycontinue
 	
 	if ($xPossible -eq $null) {
@@ -672,8 +674,8 @@ function global:fAddNewUser {
 
 function global:fListUsers {
 
-	$xUserList = get-msoluser
-	write-host ($xUserList | format-table | out-string)
+	$xUserList = (get-msoluser | select DisplayName, UserPrincipalName, Licenses)
+	write-host ($xUserList | sort DisplayName | format-table | out-string)
 	
 	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
 	if ($xExpCSV -eq "y") {
@@ -787,7 +789,7 @@ function global:fRemoveFullAccessMailbox {
 
 function global:fListMailboxes {
 	
-	$xMList = get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'}
+	$xMList = get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | sort DisplayName
 	
 	write-host ( $xMList | format-table | out-string)
 	
@@ -1054,23 +1056,29 @@ function global:fToggleMAPI {
 
 function global:fToggleActiveSync {
  	fDisplayInfo -xtext "Toggle ActiveSync Access"
-	while (!$xIdentity) {
+	while ((!$xIdentity) -AND (!$xResponce)) {
 		$xInput = fUserPrompt -xQuestion "Enter either a User ID, 'EnableAll', 'DisableAll' or 'Quit'"
-		if ((fCheckIdentity -id $xInput) -OR ($xInput -eq "enableall") -OR ($xInput -eq "disableall")) {
+		if (($xInput -eq "enableall") -OR ($xInput -eq "disableall")) {
+			$xResponce = $xInput
+		} elseif ((fCheckIdentity -id $xInput)){
 			$xIdentity = $xInput
-			remove-variable -name xInput
+			remove-variable -name xInput		
 		} elseif ($xInput -eq "quit") {
 			Return
 		} else 	{
-			fDisplayInfo -xText "Invalid Selection" -xColour "red"
+			fDisplayInfo -xText "Invalid Selection" -xColor "red" -xTime 1
+			fDidYouMean -xInput $xInput
+			remove-variable -name xInput
 		}
 	}
 	
 		
-	if ($xIdentity -eq "disableall") {
+	if ($xResponce -eq "disableall") {
+		remove-variable -name xInput
 		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -ActiveSyncenabled $False
 		write-host (get-casmailbox | select name, ActiveSyncenabled | ft | out-string)
-	} elseif ($xIdentity -eq "enableall") {
+	} elseif ($xResponce -eq "enableall") {
+		remove-variable -name xInput
 		Get-Mailbox -ResultSize Unlimited | Set-CASMailbox -ActiveSyncenabled $true
 		write-host (get-casmailbox | select name, ActiveSyncenabled | ft | out-string)
 	} else {
@@ -1239,6 +1247,14 @@ function global:fTogglePop {
 		
 	}	
 }
+
+function global:fDisplayCASMailboxStatus {
+
+	$xIdentity = fCollectIdentity -xText "Who would you like to see the status for?"
+	write-host (get-casmailbox -identity $xIdentity | ft | out-string)
+	pause
+}
+
 
 #Dist Groups =======================================================================================
 
