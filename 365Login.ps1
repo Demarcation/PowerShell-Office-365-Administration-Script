@@ -32,6 +32,73 @@
 		- Feature: Toggle Clutter settings
 		######################################################################>
 
+
+#Layout the Menu ================================================================
+		
+$global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
+								"New User"="fAddNewUser"
+								"List Users"="fListUsers"
+								"Edit User Account Name"="fEditUserAccountName"
+								}
+	"Mailboxes"=@{				"Folder Access"=@{
+															"Grant User Access to Mailbox Folder"="fAddMailboxFolderPerm"
+															"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
+															}
+								"Full Access Permissions"=@{
+															"Grant Full Access to SINGLE Mailbox"="fGrantFullAccessMailbox"
+															"Remove Full Access from SINGLE Mailbox"="fRemoveFullAccessMailbox"
+															"Grant Full Access to ALL Mailboxes"="fGrantFullAccessMailboxAllMailboxes"
+															}
+								"List Mailboxes"="fListMailboxes"
+								"List Mailbox Statistics"="fListMailboxStats"
+								"List Email Forwarding Status"="fCheckForwarding"
+								"Toggle Access to Services"=@{	"Display Mailbox Access Status"="fDisplayCASMailboxStatus"
+																"Toggle MAPI Access"="fToggleMAPI"
+																"Toggle OWA Access"="fToggleOWA"
+																"Toggle IMAP Access"="fToggleImap"
+																"Toggle POP Access"="fTogglePop"
+																"Toggle ActiveSync"="fToggleActiveSync"
+																}
+								"Hide/Unhide from GAL"="fToggleMailboxHideFromGAL"
+								"Email Alias for Mailboxes"=@{
+															"Remove Mailbox Email Alias"="fRemoveMailboxEmailAlias"
+															"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
+															"Set Default Mailbox Alias"="fSetDefaultEmailAlias"
+															}
+								"Change Forwarding Status"="fSetMailboxForwarding"
+								"Add Shared Mailbox"="fAddSharedMailbox"
+								"View Mailbox Permissions"="fShowMailboxPerms"
+								"Manage Clutter"=@{
+													"List Clutter Status"="fshowclutterall"
+													"Disable Clutter for All mailboxes"="fdisableclutterall"
+													}
+								}
+	"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
+								"Edit Group Members"=@{
+														"Add User to Dist Group"="fadduserdistgroup"
+														"Remove User from Dist Group" = "fremoveuserdistgroup"
+														}
+								"Add New Dist Group"="fAddNewDistGroup"
+								"Email Alias for Dist Groups"=@{
+																"Add Group Email Alias"="fAddDistGroupEmailAlias"
+																"Remove Group Email Alias"="fRemoveDistGroupEmailAlias"
+																}	
+								"Hide/Unhide from GAL"="fToggleDistHideFromGAL"
+								}
+	"MSOnline Org"=@{			"List Partner Information"="fViewPartnerInfo"
+								"List Domain Info"="fVeiwDomain"
+								"List Licencing Status"="fGetMsolAccountSku"
+								}
+	"Transport Rules"=@{		"List Transport Rule Status"="fGetTranStatus"
+								"Toggle Rule Status"="fToggleTransportRule"
+								}
+	"X-Experimental Function"="fExperimentalFunction"							
+								
+	}
+	
+		
+		
+		
 # Control the login process ================================================================
 $global:xLocalUserPath = $env:UserProfile+"\Office365Data" #Define the local path to store user data in - Should NOT end with a '\'
 $global:xCompanyFilePath = "Z:\~Tools\Powershell\company.csv"
@@ -330,63 +397,9 @@ function global:Use-Admin {
 
 	[bool]$global:UseAdminLoaded=$true
 
-	$global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
-										"New User"="fAddNewUser"
-										"List Users"="fListUsers"
-										"Edit User Account Name"="fEditUserAccountName"
-										}
-			"Mailboxes"=@{				"Folder Access"=@{
-																	"Grant User Access to Mailbox Folder"="fAddMailboxFolderPerm"
-																	"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
-																	}
-										"Full Access Permissions"=@{
-																	"Grant Full Access to SINGLE Mailbox"="fGrantFullAccessMailbox"
-																	"Remove Full Access from SINGLE Mailbox"="fRemoveFullAccessMailbox"
-																	"Grant Full Access to ALL Mailboxes"="fGrantFullAccessMailboxAllMailboxes"
-																	}
-										"List Mailboxes"="fListMailboxes"
-										"List Mailbox Statistics"="fListMailboxStats"
-										"List Email Forwarding Status"="fCheckForwarding"
-										"Toggle Access to Services"=@{	"Display Mailbox Access Status"="fDisplayCASMailboxStatus"
-																		"Toggle MAPI Access"="fToggleMAPI"
-																		"Toggle OWA Access"="fToggleOWA"
-																		"Toggle IMAP Access"="fToggleImap"
-																		"Toggle POP Access"="fTogglePop"
-																		"Toggle ActiveSync"="fToggleActiveSync"
-																		}
-										"Hide/Unhide from GAL"="fToggleMailboxHideFromGAL"
-										"Email Alias for Mailboxes"=@{
-																	"Remove Mailbox Email Alias"="fRemoveMailboxEmailAlias"
-																	"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
-																	"Set Default Mailbox Alias"="fSetDefaultEmailAlias"
-																	}
-										"Change Forwarding Status"="fSetMailboxForwarding"
-										"Add Shared Mailbox"="fAddSharedMailbox"
-										"View Mailbox Permissions"="fShowMailboxPerms"
-										"List Clutter Status"="fshowclutterall"
-										}
-			"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
-										"Edit Group Members"=@{
-																"Add User to Dist Group"="fadduserdistgroup"
-																"Remove User from Dist Group" = "fremoveuserdistgroup"
-																}
-										"Add New Dist Group"="fAddNewDistGroup"
-										"Email Alias for Dist Groups"=@{
-																		"Add Group Email Alias"="fAddDistGroupEmailAlias"
-																		"Remove Group Email Alias"="fRemoveDistGroupEmailAlias"
-																		}	
-										"Hide/Unhide from GAL"="fToggleDistHideFromGAL"
-										}
-			"MSOnline Org"=@{			"List Partner Information"="fViewPartnerInfo"
-										"List Domain Info"="fVeiwDomain"
-										"List Licencing Status"="fGetMsolAccountSku"
-										}
-			"Transport Rules"=@{		"List Transport Rule Status"="fGetTranStatus"
-										"Toggle Rule Status"="fToggleTransportRule"
-										}
-			"X-Experimental Function"="fExperimentalFunction"							
-										
-			}
+
+		#OLD MENU LOCATION
+	
 	$global:title="Office 365 Menu"	
 	[bool]$global:quitmenu = $false
 	[bool]$global:xProceed = $false
@@ -1055,6 +1068,14 @@ $xOutObject = $xhash.getenumerator() | foreach {new-object psobject -Property @{
 
 fExportCSV -xInput $xoutobject -xFilename "ClutterList"
 
+}
+
+function global:fdisableclutterall {
+
+fdisplayinfo -xtext "Disabling Clutter for all users...this may take a while"
+$null = get-mailbox | set-clutter -Enable $false
+
+fshowclutterall
 
 }
 
