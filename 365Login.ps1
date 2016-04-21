@@ -340,8 +340,9 @@ function global:Use-Admin {
 																	"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
 																	}
 										"Full Access Permissions"=@{
-																	"Grant Full Access to Mailbox"="fGrantFullAccessMailbox"
-																	"Remove Full Access from Mailbox"="fRemoveFullAccessMailbox"
+																	"Grant Full Access to SINGLE Mailbox"="fGrantFullAccessMailbox"
+																	"Remove Full Access from SINGLE Mailbox"="fRemoveFullAccessMailbox"
+																	"Grant Full Access to ALL Mailboxes"="fGrantFullAccessMailboxAllMailboxes"
 																	}
 										"List Mailboxes"="fListMailboxes"
 										"List Mailbox Statistics"="fListMailboxStats"
@@ -572,7 +573,6 @@ function global:fCollectAlias {
 		Return $xAlias
 	}
 
-function global:reload {Z:\~Tools\Powershell\Profile.ps1}
 
 # Below this line are the functions called by the menu values=================================
 
@@ -775,6 +775,35 @@ function global:fGrantFullAccessMailbox {
 	pause
 }
 
+function global:fGrantFullAccessMailboxAllMailboxes {
+	
+	$xUser = fCollectIdentity -xText "Enter the User who would like the access"
+	if ($xUser -eq $false) {Return $false}
+	$xAutoMapYN = fUserPrompt -xQuestion "Would you like to enable AutoMapping? (y/n)"
+	if ($xAutoMapYN -eq "y") {
+		$xAutoMap = $true
+	}elseif ($xAutoMapYN -eq "n") {
+		$xAutoMap = $false
+	}else{
+		#Default
+		$xAutoMap = $true
+	}
+	
+	get-mailbox | Add-MailboxPermission -User $xUser -AccessRight fullaccess -InheritanceType all -Automapping $xAutoMap
+	$xUserPermList = get-mailbox | get-mailboxpermission -User $xUser | where-object {$_.User -MATCH $xUser} | sort Identity
+	
+	write-host ( $xUserPermList | format-table | out-string)
+	
+	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
+	if ($xExpCSV -eq "y") {
+		$xUserPermList | export-csv $xLocalUserPath"\UserPermList.csv"
+		write-host "Generating CSV, Please Wait..."
+		timeout 5
+		Invoke-item $xLocalUserPath"\UserPermList.csv"
+	}
+	
+}
+
 function global:fRemoveFullAccessMailbox {
 
 	$xUser = fCollectIdentity -xText "Enter the User who no longer requires the access"
@@ -819,8 +848,19 @@ function global:fListMailboxStats {
 }
 
 function global:fCheckForwarding {
-	write-host (get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
-	pause
+	
+	$xCheckFwd = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | sort PrimarySMTPAddress
+	
+	write-host ($xCheckFwd | format-table | out-string)
+	
+		$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
+	if ($xExpCSV -eq "y") {
+		$xCheckFwd | export-csv $xLocalUserPath"\FwdList.csv"
+		write-host "Generating CSV, Please Wait..."
+		timeout 5
+		Invoke-item $xLocalUserPath"\FwdList.csv"
+	}
+	
 }
 
 function global:fToggleMailboxHideFromGAL {
