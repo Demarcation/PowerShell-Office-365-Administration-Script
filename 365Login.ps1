@@ -18,18 +18,12 @@
 		- FEATURE: Rename Account/email
 		- FEATURE: Remove Account
 		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
-		- FEATURE: External Auth on Dist group
 		- FEATURE: Remove Dis Group
-		- FEATURE: Check Azure Online module and Sign In Assistant and download/install if required http://stackoverflow.com/questions/16018732/msonline-cant-be-imported-on-powershell-connect-msolservice-error
 		- BUG STATUS-CONFIRMED: fSetDefaultEmailAlias does not work
-		- BUG: Discovery Search Mailbox long name causes issues in show fowarding Status
 		- FEATURE: List all emails - Get-Recipient | Select Name -ExpandProperty EmailAddresses | Select Name,  SmtpAddress
 		- FEATURE: Find Specfic email - Get-Recipient | Select Name -ExpandProperty Emailaddresses | ?{ $_.Smtpaddress -eq $xFindAddress} | select name, smtpaddress
 		- FEATURE: List all mailboxes a user has access to - get-mailboxpermission * -resultsize unlimited | ?{$_.user -match $xImput} | select Idenitity, AccessRights
-		- Feature: check who has access to mailbox
 		- Feature: make exchange on-site compatible
-		- UPDATE: add new dist group, offer option in exteral or internal
-		- Feature: Toggle Clutter settings
 		######################################################################>
 
 
@@ -40,15 +34,16 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"List Users"="fListUsers"
 								"Edit User Account Name"="fEditUserAccountName"
 								}
-	"Mailboxes"=@{				"Folder Access"=@{
-															"Grant User Access to Mailbox Folder"="fAddMailboxFolderPerm"
-															"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
-															}
-								"Full Access Permissions"=@{
+	"Mailboxes"=@{				"Mailbox Permissions"=@{
 															"Grant Full Access to SINGLE Mailbox"="fGrantFullAccessMailbox"
 															"Remove Full Access from SINGLE Mailbox"="fRemoveFullAccessMailbox"
 															"Grant Full Access to ALL Mailboxes"="fGrantFullAccessMailboxAllMailboxes"
-															}
+															"Show Mailbox Permissions for a User"="fShowMailboxPerms"
+															"Folder Access"=@{
+																				"Grant User Access to Mailbox Folder"="fAddMailboxFolderPerm"
+																				"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
+																				}
+														}
 								"List Mailboxes"="fListMailboxes"
 								"List Mailbox Statistics"="fListMailboxStats"
 								"List Email Forwarding Status"="fCheckForwarding"
@@ -67,10 +62,10 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 															}
 								"Change Forwarding Status"="fSetMailboxForwarding"
 								"Add Shared Mailbox"="fAddSharedMailbox"
-								"View Mailbox Permissions"="fShowMailboxPerms"
 								"Manage Clutter"=@{
 													"List Clutter Status"="fshowclutterall"
-													"Disable Clutter for All mailboxes"="fdisableclutterall"
+													"Disable Clutter for ALL mailboxes"="fdisableclutterall"
+													"Enable Clutter for ALL mailboxes"="fenableclutterall"
 													}
 								}
 	"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
@@ -84,6 +79,8 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 																"Remove Group Email Alias"="fRemoveDistGroupEmailAlias"
 																}	
 								"Hide/Unhide from GAL"="fToggleDistHideFromGAL"
+								"View External Auth Settings"="fViewDistExtAuth"
+								"Toggle External Auth Settings"="fToggleDistExtAuth"
 								}
 	"MSOnline Org"=@{			"List Partner Information"="fViewPartnerInfo"
 								"List Domain Info"="fVeiwDomain"
@@ -92,12 +89,10 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 	"Transport Rules"=@{		"List Transport Rule Status"="fGetTranStatus"
 								"Toggle Rule Status"="fToggleTransportRule"
 								}
-	"X-Experimental Function"="fExperimentalFunction"							
+		
 								
 	}
 	
-		
-		
 		
 # Control the login process ================================================================
 $global:xLocalUserPath = $env:UserProfile+"\Office365Data" #Define the local path to store user data in - Should NOT end with a '\'
@@ -306,7 +301,7 @@ function global:clear-passwords{
 	Remove-item $global:xLocalUserPath+"\*" -confirm
 }	
 
-# Functions to run the Admin menu ============================================================
+# Global Functions ============================================================
 
 function global:qq{start-login; use-admin}
 function global:qqq{start-login}
@@ -734,6 +729,218 @@ function global:fEditUserAccountName {
 
 #Mailboxes =======================================================================================
 
+function global:fListMailboxes {
+	
+	$xMList = get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | sort DisplayName
+	
+	write-host ( $xMList | format-table | out-string)
+	
+	fExportCSV -xInput $xMList -xFilename "MailboxList"
+}
+
+function global:fListMailboxStats {
+	
+	Write-host "Generating Statistics, Please Wait..."
+	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }
+	write-host ( $xMStats  | format-table | out-string)
+		
+	fExportCSV -xInput $xMStats -xFilename "MailboxStats"
+}
+
+function global:fCheckForwarding {
+	
+	$xCheckFwd = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | sort PrimarySMTPAddress
+	
+	write-host ($xCheckFwd | format-table | out-string)
+	
+	fExportCSV -xInput $xCheckFwd -xFilename "ForwardList"
+	
+}
+
+function global:fToggleMailboxHideFromGAL {
+	$xUser = fCollectIdentity -xText "Enter the User who you would like to hide"
+	if ($xUser -eq $false) {Return $false}
+	$xStatus = Get-mailbox -identity $xUser | select HiddenFromAddressListsEnabled
+	if ($xStatus.HiddenFromAddressListsEnabled) {
+		$xUnhide = "x"
+		$xUnhide = fUserPrompt -xQuestion "Would you like to unhide the mailbox? (y/n)"
+		if ($xUnhide -eq "n") {Return $false}
+		if ($xUnHide -eq "y") {$xHidden = $false}
+	} else {
+		$xhide = "x"
+		$xhide = fUserPrompt -xQuestion "Would you like to hide the mailbox? (y/n)"
+		if ($xHide -eq "n") {Return $false}
+		if ($xHide -eq "y") {$xHidden = $true}
+	}
+	Set-mailbox -identity $xUser -HiddenFromAddressListsEnabled $xHidden
+	write-host ( get-mailbox -identity $xUser | select Displayname, HiddenFromAddressListsEnabled | format-list | out-string )
+	pause
+}
+
+function global:fSetMailboxForwarding {
+	$xIdentity = fCollectIdentity -xText "Enter Alias of User to Forward:"
+	if ($xIdentity -eq $false) {Return $false}
+	
+	$xMailbox = get-mailbox -identity $xIdentity 
+	
+	fDisplayInfo -xText "The current setup is:"
+	write-host ($xMailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
+	
+	if (($xMailbox.ForwardingAddress -ne $null) -OR ($xMailbox.ForwardingSMTPAddress -ne $null)    ) {
+		
+		$xFwdCancel = fUserPrompt -xQuestion "Would you like to cancel the Current Forwarding? (y/n)"
+			
+		if ($xFwdCancel -eq "y") {
+			set-mailbox -identity $xIdentity -ForwardingAddress $null -ForwardingSMTPAddress $null -DeliverToMailboxAndForward $false
+		}elseif ($xFwdCancel -eq "n") {
+			$xMailbox = get-mailbox -identity $xIdentity 
+			fDisplayInfo -xText "Your configuration has not changed" -xColor Yellow
+			pause
+			Return $false
+		}else{
+			Return $false
+		}
+			
+	} else {
+	
+		$xFwdAddress = fCollectIdentity -xText "Who would you like to forward email to?"
+		if ($xFwdAddress -eq $false) {Return $false}
+		
+		$xDelToMailbox = fUserPrompt -xQuestion "Would you like to continue delivering to the Mailbox? (y/n)"
+		
+		if ($xDelToMailbox -eq "y") {
+			set-mailbox -identity $xIdentity -ForwardingAddress $xFwdAddress -DeliverToMailboxAndForward $true
+		}elseif ($xDelToMailbox -eq "n") {
+			set-mailbox -identity $xIdentity -ForwardingAddress $xFwdAddress -DeliverToMailboxAndForward $false 
+		}else{
+			Return $false
+		}
+	
+	}
+	
+	$xMailbox = get-mailbox -identity $xIdentity 
+	fDisplayInfo -xText "The New setup is:"
+	write-host ($xMailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
+	pause
+}
+
+function global:fAddSharedMailbox {
+	fStoreMainMenu -xRestore 0
+	
+	$xDisplayName = fUserPrompt -xQuestion "Display Name"
+	
+	$xAlias = fCollectAlias	
+	if ($xAlias -eq $false) {Return $false}
+	
+	#Create the Menu Hash Table Object	
+	$xDomainMenuHash = New-Object System.Collections.HashTable
+	#Create Menu Structure Hash Table and set values to be function with UPN as input
+	get-msoldomain | select name | sort-object Name | foreach-object {
+			$xDomainMenuHash.add($_.Name,'$global:xPrimarySMTPAddress = "'+$xAlias+'@'+$_.Name+'"')
+		}
+	#Call the Menu	
+	use-menu -MenuHash $xDomainMenuHash -Title "Select Domain" -NoSplash $True
+	
+	New-Mailbox -Name $xAlias –Shared -PrimarySmtpAddress $xPrimarySMTPAddress -DisplayName $xDisplayName
+	
+	write-host (Get-Mailbox $xAlias | Select Name, Alias, IsShared, PrimarySMTPAddressSelect | format-table | out-string )
+
+	pause
+
+	fStoreMainMenu -xRestore 1
+}
+
+function global:fShowMailboxPerms {
+	
+	$xAlias = fCollectIdentity -xText "Who's permissions would you like to check?"
+	
+	write-host (Get-MailboxPermission -identity $xAlias | where {$_.user -NOTMATCH "NT Authority"} | where {$_.User -NOTMATCH "Domain Admins"}| where {$_.user -NOTMATCH "Enterprise Admins"} | where {$_.user -NOTMATCH "Organization Management"} | where {$_.user -NOTMATCH "Public Folder Management"} | where {$_.user -NOTMATCH "Exchange Servers"} | where {$_.user -NOTMATCH "Exchange trusted Subsystem"} | where {$_.user -NOTMATCH "Managed Availability Servers"} | where {$_.user -NOTMATCH "Administrator"} | select User, AccessRights | Format-Table | Out-String)
+	
+	pause
+	
+}
+
+	#Alias
+function global:fAddMailboxEmailAlias {
+
+	$xIdentity = fCollectIdentity -xText "Enter identity:"
+	if ($xIdentity -eq $false) {Return $false}
+		
+	$xMailbox = get-mailbox -identity $xIdentity 
+	$xEmails = $xMailbox.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this mailbox are"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	write-host 
+	
+	$xNewEmailAddress = fCollectUPN -xText "Enter the additional email address:" -xCurrent $false
+	if ($xNewEmailAddress -eq $false) {Return}
+
+	Set-Mailbox -identity $xIdentity -emailaddresses @{Add=$xNewEmailAddress}
+
+	$xMailbox = Get-Mailbox -identity $xIdentity 
+	$xEmails = $xMailbox.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this mailbox are now"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	pause
+}
+
+function global:fRemoveMailboxEmailAlias {
+
+	$xIdentity = fCollectIdentity -xText "Enter identity:"
+	if ($xIdentity -eq $false) {Return $false}
+		
+	$xMailbox = get-mailbox -identity $xIdentity 
+	$xEmails = $xMailbox.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this mailbox are"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	write-host 
+	
+	$xNewEmailAddress = fCollectUPN -xText "Enter the email address to remove:" -xCurrent $false
+	if ($xNewEmailAddress -eq $false) {Return}
+
+	Set-Mailbox -identity $xIdentity -emailaddresses @{Remove=$xNewEmailAddress}
+
+	$xIdentity = Get-Mailbox -identity $xIdentity 
+	$xEmails = $xMailbox.EmailAddresses
+	$i = 1
+	fDisplayInfo -xText "The current emails attached to this mailbox are now"
+	foreach ($email in $xEmails) {
+		Write-Host "`t`t"$i" - "$email
+	}
+	pause
+}
+
+function global:fSetDefaultEmailAlias {
+
+
+	$xIdentity = fCollectIdentity -xText "Enter Identity:"
+	if ($xIdentity -eq $false) {Return $false}
+	
+	$xMailbox = get-mailbox $xIdentity
+	$i = 0; 
+	
+	foreach ($email in $xMailbox.EmailAddresses) {
+		if ($email -cmatch "SMTP:") {
+			$xMailBox.EmailAddresses[$i] = "smtp:ash@sussexcommunity.org.uk"
+		} 
+		$i++ 
+	}
+
+	set-mailbox -identity $xIdentity -EmailAddresses $xMailBox.EmailAddresses
+	
+	Pause
+}
+
+	#MailboxPermissions
 function global:fAddMailboxFolderPerm {
 	fStoreMainMenu -xRestore 0
 	cls
@@ -844,225 +1051,16 @@ function global:fRemoveFullAccessMailbox {
 	pause
 }
 
-function global:fListMailboxes {
-	
-	$xMList = get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | sort DisplayName
-	
-	write-host ( $xMList | format-table | out-string)
-	
-	fExportCSV -xInput $xMList -xFilename "MailboxList"
-}
-
-function global:fListMailboxStats {
-	
-	Write-host "Generating Statistics, Please Wait..."
-	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }
-	write-host ( $xMStats  | format-table | out-string)
-		
-	fExportCSV -xInput $xMStats -xFilename "MailboxStats"
-}
-
-function global:fCheckForwarding {
-	
-	$xCheckFwd = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | sort PrimarySMTPAddress
-	
-	write-host ($xCheckFwd | format-table | out-string)
-	
-	fExportCSV -xInput $xCheckFwd -xFilename "ForwardList"
-	
-}
-
-function global:fToggleMailboxHideFromGAL {
-	$xUser = fCollectIdentity -xText "Enter the User who you would like to hide"
-	if ($xUser -eq $false) {Return $false}
-	$xStatus = Get-mailbox -identity $xUser | select HiddenFromAddressListsEnabled
-	if ($xStatus.HiddenFromAddressListsEnabled) {
-		$xUnhide = "x"
-		$xUnhide = fUserPrompt -xQuestion "Would you like to unhide the mailbox? (y/n)"
-		if ($xUnhide -eq "n") {Return $false}
-		if ($xUnHide -eq "y") {$xHidden = $false}
-	} else {
-		$xhide = "x"
-		$xhide = fUserPrompt -xQuestion "Would you like to hide the mailbox? (y/n)"
-		if ($xHide -eq "n") {Return $false}
-		if ($xHide -eq "y") {$xHidden = $true}
-	}
-	Set-mailbox -identity $xUser -HiddenFromAddressListsEnabled $xHidden
-	write-host ( get-mailbox -identity $xUser | select Displayname, HiddenFromAddressListsEnabled | format-list | out-string )
-	pause
-}
-
-function global:fAddMailboxEmailAlias {
-
-	$xIdentity = fCollectIdentity -xText "Enter identity:"
-	if ($xIdentity -eq $false) {Return $false}
-		
-	$xMailbox = get-mailbox -identity $xIdentity 
-	$xEmails = $xMailbox.EmailAddresses
-	$i = 1
-	fDisplayInfo -xText "The current emails attached to this mailbox are"
-	foreach ($email in $xEmails) {
-		Write-Host "`t`t"$i" - "$email
-	}
-	write-host 
-	
-	$xNewEmailAddress = fCollectUPN -xText "Enter the additional email address:" -xCurrent $false
-	if ($xNewEmailAddress -eq $false) {Return}
-
-	Set-Mailbox -identity $xIdentity -emailaddresses @{Add=$xNewEmailAddress}
-
-	$xMailbox = Get-Mailbox -identity $xIdentity 
-	$xEmails = $xMailbox.EmailAddresses
-	$i = 1
-	fDisplayInfo -xText "The current emails attached to this mailbox are now"
-	foreach ($email in $xEmails) {
-		Write-Host "`t`t"$i" - "$email
-	}
-	pause
-}
-
-function global:fRemoveMailboxEmailAlias {
-
-	$xIdentity = fCollectIdentity -xText "Enter identity:"
-	if ($xIdentity -eq $false) {Return $false}
-		
-	$xMailbox = get-mailbox -identity $xIdentity 
-	$xEmails = $xMailbox.EmailAddresses
-	$i = 1
-	fDisplayInfo -xText "The current emails attached to this mailbox are"
-	foreach ($email in $xEmails) {
-		Write-Host "`t`t"$i" - "$email
-	}
-	write-host 
-	
-	$xNewEmailAddress = fCollectUPN -xText "Enter the email address to remove:" -xCurrent $false
-	if ($xNewEmailAddress -eq $false) {Return}
-
-	Set-Mailbox -identity $xIdentity -emailaddresses @{Remove=$xNewEmailAddress}
-
-	$xIdentity = Get-Mailbox -identity $xIdentity 
-	$xEmails = $xMailbox.EmailAddresses
-	$i = 1
-	fDisplayInfo -xText "The current emails attached to this mailbox are now"
-	foreach ($email in $xEmails) {
-		Write-Host "`t`t"$i" - "$email
-	}
-	pause
-}
-
-function global:fSetDefaultEmailAlias {
-
-
-	$xIdentity = fCollectIdentity -xText "Enter Identity:"
-	if ($xIdentity -eq $false) {Return $false}
-	
-	$xMailbox = get-mailbox $xIdentity
-	$i = 0; 
-	
-	foreach ($email in $xMailbox.EmailAddresses) {
-		if ($email -cmatch "SMTP:") {
-			$xMailBox.EmailAddresses[$i] = "smtp:ash@sussexcommunity.org.uk"
-		} 
-		$i++ 
-	}
-
-	set-mailbox -identity $xIdentity -EmailAddresses $xMailBox.EmailAddresses
-	
-	Pause
-}
-
-function global:fSetMailboxForwarding {
-	$xIdentity = fCollectIdentity -xText "Enter Alias of User to Forward:"
-	if ($xIdentity -eq $false) {Return $false}
-	
-	$xMailbox = get-mailbox -identity $xIdentity 
-	
-	fDisplayInfo -xText "The current setup is:"
-	write-host ($xMailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
-	
-	if (($xMailbox.ForwardingAddress -ne $null) -OR ($xMailbox.ForwardingSMTPAddress -ne $null)    ) {
-		
-		$xFwdCancel = fUserPrompt -xQuestion "Would you like to cancel the Current Forwarding? (y/n)"
-			
-		if ($xFwdCancel -eq "y") {
-			set-mailbox -identity $xIdentity -ForwardingAddress $null -ForwardingSMTPAddress $null -DeliverToMailboxAndForward $false
-		}elseif ($xFwdCancel -eq "n") {
-			$xMailbox = get-mailbox -identity $xIdentity 
-			fDisplayInfo -xText "Your configuration has not changed" -xColor Yellow
-			pause
-			Return $false
-		}else{
-			Return $false
-		}
-			
-	} else {
-	
-		$xFwdAddress = fCollectIdentity -xText "Who would you like to forward email to?"
-		if ($xFwdAddress -eq $false) {Return $false}
-		
-		$xDelToMailbox = fUserPrompt -xQuestion "Would you like to continue delivering to the Mailbox? (y/n)"
-		
-		if ($xDelToMailbox -eq "y") {
-			set-mailbox -identity $xIdentity -ForwardingAddress $xFwdAddress -DeliverToMailboxAndForward $true
-		}elseif ($xDelToMailbox -eq "n") {
-			set-mailbox -identity $xIdentity -ForwardingAddress $xFwdAddress -DeliverToMailboxAndForward $false 
-		}else{
-			Return $false
-		}
-	
-	}
-	
-	$xMailbox = get-mailbox -identity $xIdentity 
-	fDisplayInfo -xText "The New setup is:"
-	write-host ($xMailbox | select DisplayName, PrimarySMTPAddress, ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward | format-table | out-string)
-	pause
-}
-
-function global:fAddSharedMailbox {
-	fStoreMainMenu -xRestore 0
-	
-	$xDisplayName = fUserPrompt -xQuestion "Display Name"
-	
-	$xAlias = fCollectAlias	
-	if ($xAlias -eq $false) {Return $false}
-	
-	#Create the Menu Hash Table Object	
-	$xDomainMenuHash = New-Object System.Collections.HashTable
-	#Create Menu Structure Hash Table and set values to be function with UPN as input
-	get-msoldomain | select name | sort-object Name | foreach-object {
-			$xDomainMenuHash.add($_.Name,'$global:xPrimarySMTPAddress = "'+$xAlias+'@'+$_.Name+'"')
-		}
-	#Call the Menu	
-	use-menu -MenuHash $xDomainMenuHash -Title "Select Domain" -NoSplash $True
-	
-	New-Mailbox -Name $xAlias –Shared -PrimarySmtpAddress $xPrimarySMTPAddress -DisplayName $xDisplayName
-	
-	write-host (Get-Mailbox $xAlias | Select Name, Alias, IsShared, PrimarySMTPAddressSelect | format-table | out-string )
-
-	pause
-
-	fStoreMainMenu -xRestore 1
-}
-
-function global:fShowMailboxPerms {
-	
-	$xAlias = fCollectIdentity -xText "Who's permissions would you like to check?"
-	
-	write-host (Get-MailboxPermission -identity $xAlias | select User, AccessRights | Format-Table | Out-String)
-	
-	pause
-	
-}
-
+	#Clutter
 function global:fshowclutterall {
 
-$global:xhash=$null
-$global:xhash=@{}
+$xhash=$null
+$xhash=@{}
 fdisplayinfo -xtext "Collecting Mailbox Data"
 $mailboxes=get-mailbox
 fdisplayinfo -xtext "Collecting Clutter Data...This may take a while"
-foreach($xmailbox in $mailboxes) {$global:xhash.add($xmailbox.alias,(get-clutter -identity $xmailbox.alias.tostring()).isenabled)}
-write-host ($global:xhash | ft | out-string )
+foreach($xmailbox in $mailboxes) {$xhash.add($xmailbox.alias,(get-clutter -identity $xmailbox.alias.tostring()).isenabled)}
+write-host ($xhash | ft | out-string )
 
 $xOutObject = $xhash.getenumerator() | foreach {new-object psobject -Property @{Name = $_.name;Enabled=$_.value}}
 
@@ -1079,8 +1077,16 @@ fshowclutterall
 
 }
 
-#Mailbox Services =======================================================================================
+function global:fenableclutterall {
 
+fdisplayinfo -xtext "Enabling Clutter for all users...this may take a while"
+$null = get-mailbox | set-clutter -Enable $true
+
+fshowclutterall
+
+}
+
+	#Mailbox Services 
 function global:fToggleMAPI {
  	fDisplayInfo -xtext "Toggle MAPI Access"
 	while (!$xIdentity) {
@@ -1330,7 +1336,40 @@ function global:fDisplayCASMailboxStatus {
 }
 
 
-#Dist Groups =======================================================================================
+#Distribution Groups =======================================================================================
+
+function global:fAddNewDistGroup {
+	fStoreMainMenu -xRestore 0
+	$xgroupname = fUserPrompt -xQuestion "Enter the group alias: "  
+			
+	function global:fNewDistGroup {
+	PARAM(
+	[string]$xGroupName,
+	[string]$xSelectedDomain
+	)
+		New-DistributionGroup -Name $xGroupName -DisplayName $xgroupname -Alias $xgroupname -PrimarySmtpAddress $xgroupname"@"$xSelectedDomain  
+		Set-DistributionGroup -Identity $xGroupName -RequireSenderAuthenticationEnabled $false -HiddenFromAddressListsEnable $false 
+	}
+		
+	#Create the Menu Hash Table Object	
+	$xMenuHash = New-Object System.Collections.HashTable
+	#Create Menu Structure Hash Table and set values to be function with UPN as input
+	get-msoldomain | select name | sort-object Name | foreach-object {
+			$xMenuHash.add($_.Name,"fNewDistGroup -xGroupName "+$xGroupName+" -xSelectedDomain "+$_.Name)
+		}
+	#Call the Menu	
+	$xvar = use-menu -MenuHash $xMenuHash -Title "Select Domain" -NoSplash $True
+	
+	$xDisExtAcc = fUserPrompt -xQuestion "Would you like to disable external mail to this address? (y/n)" 
+	if ($xDisExtAcc -eq "y") { Set-DistributionGroup -Identity $xGroupName -RequireSenderAuthenticationEnabled $true }
+	
+	Write-Host (get-DistributionGroup -Identity $xGroupName | select Name, RequireSenderAuthenticationEnabled, PrimarySmtpAddress | format-table | out-string)
+	remove-variable xgroupname, xmenuhash, xvar, xDisExtAcc
+	fStoreMainMenu -xRestore 1
+	fDisplayInfo -xText "You will now be taken to add new members to the group"
+	pause
+	fAddUserDistGroup
+}
 
 function global:fListDistMembers {
 PARAM(
@@ -1354,6 +1393,65 @@ PARAM(
 	
 }
 
+function global:fToggleDistHideFromGAL {
+	$xName = fCollectIdentity -xText "Enter the group you would like to hide"
+	if ($xName -eq $false) {Return $false}
+	$xStatus = Get-DistributionGroup -identity $xName | select HiddenFromAddressListsEnabled
+	if ($xStatus.HiddenFromAddressListsEnabled) {
+		$xUnhide = "x"
+		$xUnhide = fUserPrompt -xQuestion "Would you like to unhide the Group? (y/n)"
+		if ($xUnhide -eq "n") {Return $false}
+		if ($xUnHide -eq "y") {$xHidden = $false}
+	} else {
+		$xhide = "x"
+		$xhide = fUserPrompt -xQuestion "Would you like to hide the Group? (y/n)"
+		if ($xHide -eq "n") {Return $false}
+		if ($xHide -eq "y") {$xHidden = $true}
+	}
+	Set-DistributionGroup -identity $xName -HiddenFromAddressListsEnabled $xHidden
+	write-host ( Get-DistributionGroup -identity $xName | select Displayname, HiddenFromAddressListsEnabled | format-list | out-string )
+	pause
+}
+
+function global:fViewDistExtAuth {
+
+	$xExtAuth = Get-DistributionGroup  | ft identity, RequireSenderAuthenticationEnabled
+	write-host ( $xExtAuth | out-string)
+	fExportCSV -xInput $xExtAuth -XFilename "DistExtAuth"
+
+}
+
+function global:fToggleDistExtAuth {
+
+	$xName = fCollectIdentity -xText "Enter the group you would like to toggle"
+	if ($xName -eq $false) {Return $false}
+	
+	$xStatus = Get-DistributionGroup -identity $xName | select Displayname, RequireSenderAuthenticationEnabled
+	
+	fDisplayInfo -xText "The Current Status is:"
+	write-host ( $xStatus | format-list | out-string )
+	
+	if ($xStatus.RequireSenderAuthenticationEnabled) {
+		$xExt = "x"
+		$xExt = fUserPrompt -xQuestion "Would you like to ALLOW external users? (y/n)"
+		if ($xExt -eq "n") {Return $false}
+		if ($xExt -eq "y") {$xEnabled = $false}
+	} else {
+		$xhide = "x"
+		$xhide = fUserPrompt -xQuestion "Would you like to BLOCK external users? (y/n)"
+		if ($xHide -eq "n") {Return $false}
+		if ($xHide -eq "y") {$xEnabled = $true}
+	}
+	Set-DistributionGroup -identity $xName -RequireSenderAuthenticationEnabled $xEnabled
+	
+	fDisplayInfo -xText "The New Status is:"
+	write-host ( Get-DistributionGroup -identity $xName | select Displayname, RequireSenderAuthenticationEnabled | format-list | out-string )
+	pause
+	
+}
+
+
+	#Add remove user
 function global:fAddUserDistGroup {
 	fStoreMainMenu -xRestore 0
 	$xDistMenuHash = New-Object System.Collections.HashTable
@@ -1400,40 +1498,8 @@ function global:fRemoveUserDistGroup {
 	fStoreMainMenu -xRestore 1
 	pause
 }
-
-function global:fAddNewDistGroup {
-	fStoreMainMenu -xRestore 0
-	$xgroupname = fUserPrompt -xQuestion "Enter the group alias: "  
-			
-	function global:fNewDistGroup {
-	PARAM(
-	[string]$xGroupName,
-	[string]$xSelectedDomain
-	)
-		New-DistributionGroup -Name $xGroupName -DisplayName $xgroupname -Alias $xgroupname -PrimarySmtpAddress $xgroupname"@"$xSelectedDomain  
-		Set-DistributionGroup -Identity $xGroupName -RequireSenderAuthenticationEnabled $false -HiddenFromAddressListsEnable $false 
-	}
-		
-	#Create the Menu Hash Table Object	
-	$xMenuHash = New-Object System.Collections.HashTable
-	#Create Menu Structure Hash Table and set values to be function with UPN as input
-	get-msoldomain | select name | sort-object Name | foreach-object {
-			$xMenuHash.add($_.Name,"fNewDistGroup -xGroupName "+$xGroupName+" -xSelectedDomain "+$_.Name)
-		}
-	#Call the Menu	
-	$xvar = use-menu -MenuHash $xMenuHash -Title "Select Domain" -NoSplash $True
 	
-	$xDisExtAcc = fUserPrompt -xQuestion "Would you like to disable external mail to this address? (y/n)" 
-	if ($xDisExtAcc -eq "y") { Set-DistributionGroup -Identity $xGroupName -RequireSenderAuthenticationEnabled $true }
-	
-	Write-Host (get-DistributionGroup -Identity $xGroupName | select Name, RequireSenderAuthenticationEnabled, PrimarySmtpAddress | format-table | out-string)
-	remove-variable xgroupname, xmenuhash, xvar, xDisExtAcc
-	fStoreMainMenu -xRestore 1
-	fDisplayInfo -xText "You will now be taken to add new members to the group"
-	pause
-	fAddUserDistGroup
-}
-
+	#Alias
 function global:fAddDistGroupEmailAlias {
 
 	$xGroupName = fCollectIdentity -xText "Enter Group Name:"
@@ -1495,25 +1561,6 @@ function global:fRemoveDistGroupEmailAlias {
 	pause
 }
 
-function global:fToggleDistHideFromGAL {
-	$xName = fCollectIdentity -xText "Enter the group you would like to hide"
-	if ($xName -eq $false) {Return $false}
-	$xStatus = Get-DistributionGroup -identity $xName | select HiddenFromAddressListsEnabled
-	if ($xStatus.HiddenFromAddressListsEnabled) {
-		$xUnhide = "x"
-		$xUnhide = fUserPrompt -xQuestion "Would you like to unhide the Group? (y/n)"
-		if ($xUnhide -eq "n") {Return $false}
-		if ($xUnHide -eq "y") {$xHidden = $false}
-	} else {
-		$xhide = "x"
-		$xhide = fUserPrompt -xQuestion "Would you like to hide the Group? (y/n)"
-		if ($xHide -eq "n") {Return $false}
-		if ($xHide -eq "y") {$xHidden = $true}
-	}
-	Set-DistributionGroup -identity $xName -HiddenFromAddressListsEnabled $xHidden
-	write-host ( Get-DistributionGroup -identity $xName | select Displayname, HiddenFromAddressListsEnabled | format-list | out-string )
-	pause
-}
 
 #Organisation =======================================================================================
 	
@@ -1573,10 +1620,5 @@ function global:fToggleTransportRule {
 	fStoreMainMenu -xRestore 1
 }
 
-# Other functions =======================================================================================
-
-function global:fExperimentalFunction{
-
-}
 
 if (!$global:ForceLoginFirst) {$global:ForceLoginFirst = $false}
