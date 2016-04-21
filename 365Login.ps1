@@ -363,6 +363,7 @@ function global:Use-Admin {
 										"Change Forwarding Status"="fSetMailboxForwarding"
 										"Add Shared Mailbox"="fAddSharedMailbox"
 										"View Mailbox Permissions"="fShowMailboxPerms"
+										"List Clutter Status"="fshowclutterall"
 										}
 			"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
 										"Edit Group Members"=@{
@@ -573,6 +574,20 @@ function global:fCollectAlias {
 		Return $xAlias
 	}
 
+function global:fExportCSV {
+PARAM(
+$xInput,
+[string]$xFilename
+)
+
+	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
+	if ($xExpCSV -eq "y") {
+		$xInput | export-csv $xLocalUserPath"\"$xFilename".csv"
+		write-host "Generating CSV, Please Wait..."
+		timeout 3
+		Invoke-item $xLocalUserPath"\"$xFilename".csv"
+	}
+}
 
 # Below this line are the functions called by the menu values=================================
 
@@ -822,13 +837,7 @@ function global:fListMailboxes {
 	
 	write-host ( $xMList | format-table | out-string)
 	
-	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
-	if ($xExpCSV -eq "y") {
-		$xMList | export-csv $xLocalUserPath"\MailboxList.csv"
-		write-host "Generating CSV, Please Wait..."
-		timeout 5
-		Invoke-item $xLocalUserPath"\MailboxList.csv"
-	}
+	fExportCSV -xInput $xMList -xFilename "MailboxList"
 }
 
 function global:fListMailboxStats {
@@ -837,14 +846,7 @@ function global:fListMailboxStats {
 	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }
 	write-host ( $xMStats  | format-table | out-string)
 		
-	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
-	if ($xExpCSV -eq "y") {
-		$xMStats | export-csv $xLocalUserPath"\MailboxStatistics.csv"
-		write-host "Generating CSV, Please Wait..."
-		timeout 5
-		Invoke-item $xLocalUserPath"\MailboxStatistics.csv"
-	}
-
+	fExportCSV -xInput $xMStats -xFilename "MailboxStats"
 }
 
 function global:fCheckForwarding {
@@ -853,13 +855,7 @@ function global:fCheckForwarding {
 	
 	write-host ($xCheckFwd | format-table | out-string)
 	
-		$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
-	if ($xExpCSV -eq "y") {
-		$xCheckFwd | export-csv $xLocalUserPath"\FwdList.csv"
-		write-host "Generating CSV, Please Wait..."
-		timeout 5
-		Invoke-item $xLocalUserPath"\FwdList.csv"
-	}
+	fExportCSV -xInput $xCheckFwd -xFilename "ForwardList"
 	
 }
 
@@ -1043,6 +1039,23 @@ function global:fShowMailboxPerms {
 	
 	pause
 	
+}
+
+function global:fshowclutterall {
+
+$global:xhash=$null
+$global:xhash=@{}
+fdisplayinfo -xtext "Collecting Mailbox Data"
+$mailboxes=get-mailbox
+fdisplayinfo -xtext "Collecting Clutter Data...This may take a while"
+foreach($xmailbox in $mailboxes) {$global:xhash.add($xmailbox.alias,(get-clutter -identity $xmailbox.alias.tostring()).isenabled)}
+write-host ($global:xhash | ft | out-string )
+
+$xOutObject = $xhash.getenumerator() | foreach {new-object psobject -Property @{Name = $_.name;Enabled=$_.value}}
+
+fExportCSV -xInput $xoutobject -xFilename "ClutterList"
+
+
 }
 
 #Mailbox Services =======================================================================================
