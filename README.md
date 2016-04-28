@@ -1,10 +1,11 @@
 # PowerShell-Office-365-Administration-Script
 This is an administration system for office 365 through powershell.
+It can be used for quick login with stored details or full administrative tasks from the menu
 
 Just download the 365Login.ps1 file and run with powershell
 
 Once you have run the script, just type 'Start-Login' to get connected to Office 365 Powershell.
-You can use 'Use-Admin' to access the main menu
+You can use 'Use-Admin' to access the main menu.
 
 ==Quick Loading of the script:
 
