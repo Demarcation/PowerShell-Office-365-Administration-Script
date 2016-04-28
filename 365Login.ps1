@@ -96,8 +96,11 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 		
 # Control the login process ================================================================
 $global:xLocalUserPath = $env:UserProfile+"\Office365Data" #Define the local path to store user data in - Should NOT end with a '\'
-$global:xCompanyFilePath = "Z:\~Tools\Powershell\company.csv"
+$global:xCompanyFilePath = "Z:\~Tools\Powershell\companys.csv" #Allow central companys file for multi users
 $ErrorActionPreference = 'Stop'
+
+
+
 
 function global:start-login{
 	$global:ForceLoginFirst = $true
@@ -139,21 +142,23 @@ function global:fLoginMenu{
 		new-item $global:xLocalUserPath -type Directory
 	}	
 	
-	if (((test-path $global:xLocalUserPath'\companys.csv') -ne $true) -AND (test-path Z:\~Tools\Powershell\companys.csv) ) {	
-		#For Internal Use to move file to new location - This will be removed in later edition
-		copy Z:\~Tools\Powershell\companys.csv $global:xLocalUserPath'\companys.csv'
-		copy c:\O365\* $global:xLocalUserPath
-	} elseif (((test-path $global:xLocalUserPath'\companys.csv') -ne $true) -AND ((test-path Z:\~Tools\Powershell\companys.csv) -ne $true) ) {
-		#else if the file is missing locally and on the share download the demo data from github
+	if ((test-path $global:xCompanyFilePath ) -ne $true)  {
+		#If the file is missing locally and on the share download the demo data from github
 		$source = "https://raw.githubusercontent.com/manicd/PowerShell-Office-365-Administration-Script/master/companys.csv"
-		$destination = $global:xLocalUserPath+"\companys.csv"
+		$destination = $global:xCompanyFilePath
 		Invoke-WebRequest $source -OutFile $destination
 		fDisplayInfo -xText "Please edit the companys.csv file for your own use." -xText2 "At this time please ensure you do NOT include spaces in company names" -xText3 "Tip: Try using hypenated names instead e.g. Johns-Cleaning-Company " -xTime 5
 		Invoke-Item $destination
 		pause
+	} 
+	
+	
+	#Die if company file still not there
+	if ((test-path $global:xCompanyFilePath ) -ne $true ) {
+		Throw "Cannot Locate Company File at $global:xCompanyFilePath. Check file location and permissions and try again."
 	}
 	
-	$global:csv = import-csv $global:xLocalUserPath'\companys.csv'
+	$global:csv = import-csv $global:xCompanyFilePath
 	
 	#Create Hash Table Object	
 	$xMenuHash = New-Object System.Collections.HashTable
