@@ -1029,7 +1029,7 @@ function global:fGrantFullAccessMailboxAllMailboxes {
 		$xAutoMap = $true
 	}
 	
-	get-mailbox | Add-MailboxPermission -User $xUser -AccessRight fullaccess -InheritanceType all -Automapping $xAutoMap
+	get-mailbox | where {$_.name -NOTMATCH "Discovery"} | Add-MailboxPermission -User $xUser -AccessRight fullaccess -InheritanceType all -Automapping $xAutoMap
 	$xUserPermList = get-mailbox | get-mailboxpermission -User $xUser | where-object {$_.User -MATCH $xUser} | sort Identity
 	
 	write-host ( $xUserPermList | format-table | out-string)
