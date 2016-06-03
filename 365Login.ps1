@@ -31,7 +31,8 @@
 		
 $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"New User"="fAddNewUser"
-								"List Users"="fListUsers"
+								"List Users (All)"="fListUsers"
+								"List Users (Licensed)"="fListLicensedUsers"
 								"Edit User Account Name"="fEditUserAccountName"
 								}
 	"Mailboxes"=@{				"Mailbox Permissions"=@{
@@ -44,7 +45,8 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 																				"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
 																				}
 														}
-								"List Mailboxes"="fListMailboxes"
+								"List Mailboxes (All)"="fListMailboxes"
+								"List Mailboxes (User Only)"="fListUserMailboxes"
 								"List Mailbox Statistics"="fListMailboxStats"
 								"List Email Forwarding Status"="fCheckForwarding"
 								"Toggle Access to Services"=@{	"Display Mailbox Access Status"="fDisplayCASMailboxStatus"
@@ -131,7 +133,7 @@ function global:start-login{
 		
 		
 
-	fClear-Login
+	
 	cls
 	fLoginMenu	
 }
@@ -714,6 +716,20 @@ function global:fListUsers {
 	}
 }
 
+function global:fListLicensedUsers {
+
+	$xUserList = (get-msoluser | ? { $_.islicensed -eq $true } | select DisplayName, UserPrincipalName, Licenses)
+	write-host ($xUserList | sort DisplayName | format-table | out-string)
+	
+	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
+	if ($xExpCSV -eq "y") {
+		$xUserList | export-csv $xLocalUserPath"\UserList.csv"
+		write-host "Generating CSV, Please Wait..."
+		timeout 5
+		Invoke-item $xLocalUserPath"\UserList.csv"
+	}
+}
+
 function global:fEditUserAccountName {
 		
 	$xOldUPN = fCollectUPN -xText "Enter Old User UPN:"
@@ -737,6 +753,15 @@ function global:fEditUserAccountName {
 function global:fListMailboxes {
 	
 	$xMList = get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | sort DisplayName
+	
+	write-host ( $xMList | format-table | out-string)
+	
+	fExportCSV -xInput $xMList -xFilename "MailboxList"
+}
+
+function global:fListUserMailboxes {
+	
+	$xMList = get-mailbox | ? { $_.IsShared -eq $false } | ? { $_.IsResource -eq $false } | ? { $_.IsLinked -eq $false } | ? { $_.IsRootPublicFolderMailbox -eq $false } | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | sort DisplayName
 	
 	write-host ( $xMList | format-table | out-string)
 	
