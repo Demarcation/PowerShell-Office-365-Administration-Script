@@ -131,7 +131,7 @@ function global:start-login{
 	}
 	
 		
-		
+	fClear-Login	
 
 	
 	cls
