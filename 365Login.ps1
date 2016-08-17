@@ -34,6 +34,7 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"List Users (All)"="fListUsers"
 								"List Users (Licensed)"="fListLicensedUsers"
 								"Edit User Account Name"="fEditUserAccountName"
+								"Set Password Never Expires (All)"="fSetPasswordNeverExpireAll"
 								}
 	"Mailboxes"=@{				"Mailbox Permissions"=@{
 															"Grant Full Access to SINGLE Mailbox"="fGrantFullAccessMailbox"
@@ -48,6 +49,7 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"List Mailboxes (All)"="fListMailboxes"
 								"List Mailboxes (User Only)"="fListUserMailboxes"
 								"List Mailbox Statistics"="fListMailboxStats"
+								"Set 30day Deleted Items Recovery (All)"="fRecoverDelItem30days"
 								"List Email Forwarding Status"="fCheckForwarding"
 								"Toggle Access to Services"=@{	"Display Mailbox Access Status"="fDisplayCASMailboxStatus"
 																"Toggle MAPI Access"="fToggleMAPI"
@@ -64,6 +66,8 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 															}
 								"Change Forwarding Status"="fSetMailboxForwarding"
 								"Add Shared Mailbox"="fAddSharedMailbox"
+								"Shared Mailbox Copy to Sent (Single Mailbox)"="fSingleSharedSentItemsCopy"
+								"Shared Mailbox Copy to Sent (All Mailboxes)"="fAllSharedSentItemsCopy"
 								"Manage Clutter"=@{
 													"List Clutter Status"="fshowclutterall"
 													"Disable Clutter for ALL mailboxes"="fdisableclutterall"
@@ -88,8 +92,9 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"List Domain Info"="fVeiwDomain"
 								"List Licencing Status"="fGetMsolAccountSku"
 								}
-	"Transport Rules"=@{		"List Transport Rule Status"="fGetTranStatus"
+	"Mail Flow and Spam"=@{		"List Transport Rule Status"="fGetTranStatus"
 								"Toggle Rule Status"="fToggleTransportRule"
+								"Enable Connection Filter Safe List"="global:fSetSafelistEnable"
 								}
 		
 								
@@ -132,7 +137,6 @@ function global:start-login{
 	
 		
 	fClear-Login	
-
 	
 	cls
 	fLoginMenu	
@@ -748,6 +752,21 @@ function global:fEditUserAccountName {
 	#This might not rename mailbox - investigate
 }
 
+function global:fSetPasswordNeverExpireAll {
+			
+			fDisplayInfo -xText "Collecting User List"
+			$xUsers = Get-msoluser
+			
+			fDisplayInfo -xText "Adjusting Passwords to Never Expire"
+			$xNull = $xUsers | Set-MsolUser -PasswordNeverExpires $true
+			
+			fDisplayInfo -xText "Gathering Results"
+			$xResults = Get-msoluser | Select UserPrincipalName, PasswordNeverExpires | sort UserPrincipalName
+			
+			write-host ( $xResults | format-table | out-string)
+			fExportCSV -xInput $xResults -xFilename "PassNeverExpire"
+}
+
 #Mailboxes =======================================================================================
 
 function global:fListMailboxes {
@@ -772,7 +791,7 @@ function global:fListMailboxStats {
 	
 	Write-host "Generating Statistics, Please Wait..."
 	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }
-	write-host ( $xMStats  | format-table | out-string)
+	write-host ( $xMStats | sort TotalItemSize | format-table | out-string)
 		
 	fExportCSV -xInput $xMStats -xFilename "MailboxStats"
 }
@@ -889,6 +908,53 @@ function global:fShowMailboxPerms {
 	pause
 	
 }
+
+function global:fRecoverDelItem30days {
+			
+			fDisplayInfo -xText "Collecting Mailbox List"
+			$xMailboxes = Get-Mailbox -ResultSize unlimited -Filter {(RecipientTypeDetails -eq 'UserMailbox')} 
+			fDisplayInfo -xText "Adjusting Deleted Items Recovery to 30 days"
+			$xNull = $xMailboxes | Set-Mailbox -RetainDeletedItemsFor 30
+			fDisplayInfo -xText "Gathering Results"
+			$xResults = Get-Mailbox -ResultSize unlimited -Filter {(RecipientTypeDetails -eq 'UserMailbox')} | Select Displayname, RetainDeletedItemsFor | sort displayname
+			write-host ( $xResults | format-table | out-string)
+			fExportCSV -xInput $xResults -xFilename "RecoverDelItemsTime"
+}
+
+function global:fSingleSharedSentItemsCopy {
+	
+	$xSMbox = fCollectIdentity -xText "Enter the Shared Mailbox name"
+	if ($xSMBox -eq $false) {Return $false}
+	
+	if ( (get-mailbox $xSMbox | select RecipientTypeDetails).recipienttypedetails -eq "SharedMailbox" ) {
+	
+		Set-Mailbox -identity $xSMbox -MessageCopyForSentAsEnabled $true -MessageCopyForSendOnBehalfEnabled $true
+		write-host (Get-Mailbox -identity $xSMbox | select identity,MessageCopyForSentAsEnabled,MessageCopyForSendOnBehalfEnabled | format-table | out-string)
+		pause
+		
+	}
+	else{
+	
+		fDisplayInfo -xText "Mailbox specified is NOT a Shared Mailbox"
+		pause
+		
+	}
+	
+}
+
+function global:fAllSharedSentItemsCopy {
+	
+
+	$SMBoxList = Get-Mailbox -ResultSize unlimited -Filter {(RecipientTypeDetails -eq 'SharedMailbox')}
+	$SMBoxList	| Set-Mailbox -MessageCopyForSentAsEnabled $true -MessageCopyForSendOnBehalfEnabled $true
+	$SMBoxchart = Get-Mailbox -ResultSize unlimited -Filter {(RecipientTypeDetails -eq 'SharedMailbox')} | select identity,MessageCopyForSentAsEnabled,MessageCopyForSendOnBehalfEnabled
+	write-host ( $SMBoxchart | format-table | out-string)
+	
+	fExportCSV -xInput $SMBoxchart -xFilename "SharedMailboxCopySentItemsList"
+		
+}
+
+
 
 	#Alias
 function global:fAddMailboxEmailAlias {
@@ -1038,6 +1104,7 @@ function global:fGrantFullAccessMailbox {
 	Add-MailboxPermission -identity $xMailbox -User $xUser -AccessRight fullaccess -InheritanceType all -Automapping $xAutoMap
 	write-host (Get-MailboxPermission -identity $xMailbox | format-table | out-string)
 	pause
+	
 }
 
 function global:fGrantFullAccessMailboxAllMailboxes {
@@ -1609,7 +1676,7 @@ function global:fGetMsolAccountSku {
 	pause
 }
 
-#Transport Rules =======================================================================================
+#Mail Flow and Spam =======================================================================================
 
 function global:fGetTranStatus {
 	write-host (get-TransportRule | select name, state | format-table | out-string)
@@ -1649,6 +1716,26 @@ function global:fToggleTransportRule {
 	use-menu -MenuHash $xTRMenuHash -Title "Select a Transport Rule" -NoSplash 1
 	fStoreMainMenu -xRestore 1
 }
+
+
+function global:fSetSafelistEnable {
+
+fDisplayInfo -xText "Setting the Organisation Connection Filter"
+
+Set-HostedConnectionFilterPolicy -Identity Default -EnableSafeList $true
+write-host (Get-HostedConnectionFilterPolicy -Identity Default | select Identity, EnableSafeList | format-table | out-string)
+pause
+
+fDisplayInfo -xText "Setting each Mailbox to Accept Mail from Contacts"
+
+get-mailbox | set-MailboxJunkEmailConfiguration -ContactsTrusted $true
+write-host (get-mailbox | get-MailboxJunkEmailConfiguration | ft identity, ContactsTrusted | format-table | out-string)
+pause
+
+}
+
+
+
 
 
 if (!$global:ForceLoginFirst) {$global:ForceLoginFirst = $false}
