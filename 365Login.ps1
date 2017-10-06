@@ -40,7 +40,9 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 															"Grant Full Access to SINGLE Mailbox"="fGrantFullAccessMailbox"
 															"Remove Full Access from SINGLE Mailbox"="fRemoveFullAccessMailbox"
 															"Grant Full Access to ALL Mailboxes"="fGrantFullAccessMailboxAllMailboxes"
-															"Show Mailbox Permissions for a User"="fShowMailboxPerms"
+															"Show Permissions on a Mailbox"="fShowMailboxPerms"
+															"Find Mailboxes User can Access"="fFindUserPermissions"
+															"Add Send As Permissions"="fGrantSendAsPerms"
 															"Folder Access"=@{
 																				"Grant User Access to Mailbox Folder"="fAddMailboxFolderPerm"
 																				"Remove User Access from Mailbox Folder"="fRemoveMailboxFolderPerm"
@@ -50,6 +52,7 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"List Mailboxes (User Only)"="fListUserMailboxes"
 								"List Mailbox Statistics"="fListMailboxStats"
 								"Set 30day Deleted Items Recovery (All)"="fRecoverDelItem30days"
+								"Toggle Shared Mailbox"="fConvertSharedMailbox"
 								"List Email Forwarding Status"="fCheckForwarding"
 								"Toggle Access to Services"=@{	"Display Mailbox Access Status"="fDisplayCASMailboxStatus"
 																"Toggle MAPI Access"="fToggleMAPI"
@@ -73,6 +76,10 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 													"Disable Clutter for ALL mailboxes"="fdisableclutterall"
 													"Enable Clutter for ALL mailboxes"="fenableclutterall"
 													}
+								"Manage Focused Inbox"=@{
+													"Disable Focused Inbox for ALL mailboxes"="fdisablefocusedall"
+													"Enable Focused Inbox for ALL mailboxes"="fenablefocusedall"
+													}													
 								}
 	"Dist Groups"=@{			"List Dist Groups and Members"="fListDistMembers"
 								"Edit Group Members"=@{
@@ -94,7 +101,9 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								}
 	"Mail Flow and Spam"=@{		"List Transport Rule Status"="fGetTranStatus"
 								"Toggle Rule Status"="fToggleTransportRule"
-								"Enable Connection Filter Safe List"="global:fSetSafelistEnable"
+								"Enable Connection Filter Safe List"="fSetSafelistEnable"
+								}
+	"Partner"=@{				"List All Active Accounts"="fListAllActive"
 								}
 		
 								
@@ -608,6 +617,21 @@ $xInput,
 	}
 }
 
+function global:fExportTXT {
+PARAM(
+$xInput,
+[string]$xFilename
+)
+
+	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as TXT? (y/n)"
+	if ($xExpCSV -eq "y") {
+		$xInput | out-file $xLocalUserPath"\"$xFilename".TXT"
+		write-host "Generating TXT, Please Wait..."
+		timeout 3
+		Invoke-item $xLocalUserPath"\"$xFilename".TXT"
+	}
+}
+
 # Below this line are the functions called by the menu values=================================
 
 #Users =======================================================================================
@@ -899,6 +923,31 @@ function global:fAddSharedMailbox {
 	fStoreMainMenu -xRestore 1
 }
 
+function global:fConvertSharedMailbox {
+
+	$xUser = fCollectIdentity -xText "Enter the mailbox you would like to convert:"
+	if ($xUser -eq $false) {Return $false}
+
+	$xStatus = Get-mailbox -identity $xUser | select RecipientTypeDetails
+	
+	if (($xStatus.RecipientTypeDetails) -eq "UserMailbox") {
+		
+		fDisplayInfo -xText "Converting to Shared Mailbox"
+		Set-mailbox -identity $xUser -Type Shared	
+			
+	} else { 
+	
+		fDisplayInfo -xText "Converting to User Mailbox"
+		Set-mailbox -identity $xUser -Type Regular
+		
+	}
+	
+	start-sleep 3
+	write-host ( get-mailbox -identity $xUser | select Displayname, RecipientTypeDetails | format-list | out-string )
+	pause
+
+}
+
 function global:fShowMailboxPerms {
 	
 	$xAlias = fCollectIdentity -xText "Who's permissions would you like to check?"
@@ -1100,11 +1149,49 @@ function global:fGrantFullAccessMailbox {
 		#Default
 		$xAutoMap = $true
 	}
-	
+	$xSendAsYN = fUserPrompt -xQuestion "Would you like to include Send As Permissions? (y/n)"
+	if ($xSendAsYN -eq "y") {
+		$xSendAs = $true
+	}elseif ($xSendAsYN -eq "n") {
+		$xSendAs = $false
+	}else{
+		#Default
+		$xSendAs = $true
+	}
+	fDisplayInfo -xText "Adding Mailbox Permission"
 	Add-MailboxPermission -identity $xMailbox -User $xUser -AccessRight fullaccess -InheritanceType all -Automapping $xAutoMap
-	write-host (Get-MailboxPermission -identity $xMailbox | format-table | out-string)
-	pause
+	if ($xSendAs = $true) {
+	fDisplayInfo -xText "Setting Send As Permission"
+	Add-RecipientPermission $xMailbox -AccessRights SendAs -Trustee $xUser
+	}
+	fDisplayInfo -xText "Mailbox Permissions:"
+	$xNewMBPerms = Get-MailboxPermission -identity $xMailbox
+	write-host ( $xNewMBPerms | format-table | out-string)
+	fDisplayInfo -xText "Send As Permissions:"
+	$xNewSendAsPerms = Get-RecipientPermission $xMailbox
+	write-host ($xNewSendAsPerms | format-table | out-string)
 	
+	fDisplayInfo -xText "Would you like to export Mailbox Permissions List"
+	fExportCSV -xInput $xNewMBPerms -xFilename "MailboxPerms"
+	fDisplayInfo -xText "Would you like to export Send As List"
+	fExportCSV -xInput $xNewSendAsPerms -xFilename "SendAsPerms"
+}
+
+function global:fGrantSendAsPerms {
+	
+	$xUser = fCollectIdentity -xText "Enter the User who would like the access"
+	if ($xUser -eq $false) {Return $false}
+	$xMailbox = fCollectIdentity -xText "Enter the Mailbox they would like access for"
+	if ($xMailbox -eq $false) {Return $false}
+	
+	fDisplayInfo -xText "Setting Send As Permission"
+	Add-RecipientPermission $xMailbox -AccessRights SendAs -Trustee $xUser
+	
+	fDisplayInfo -xText "Send As Permissions:"
+	$xNewSendAsPerms = Get-RecipientPermission $xMailbox
+	write-host ($xNewSendAsPerms | format-table | out-string)
+	
+	fExportCSV -xInput $xNewSendAsPerms -xFilename "SendAsPerms"
 }
 
 function global:fGrantFullAccessMailboxAllMailboxes {
@@ -1148,6 +1235,20 @@ function global:fRemoveFullAccessMailbox {
 	pause
 }
 
+function global:fFindUserPermissions {
+write-host (get-msoluser | select UserPrincipalName | sort UserPrincipalName | format-table | out-string)
+
+$xUsername = fCollectUPN -xCurrent $true -xText "Enter the User Login email address to search on"
+
+$xPermsList = get-mailbox | Get-MailboxPermission | ? { $_.user -eq $xUsername}
+
+write-host ($xPermsList| format-table | out-string)
+
+fExportCSV -xInput $xPermsList -xFilename "PermsList"
+
+}
+
+
 	#Clutter
 function global:fshowclutterall {
 
@@ -1182,6 +1283,28 @@ $null = get-mailbox | set-clutter -Enable $true
 fshowclutterall
 
 }
+
+	#Focused Inbox
+
+function global:fdisablefocusedall {
+
+fdisplayinfo -xtext "Disabling Focused Inbox for all users...this may take a while"
+$null = Set-OrganizationConfig -FocusedInboxOn $false
+
+write-host (Get-OrganizationConfig | select FocusedInboxOn | fl | out-string)
+pause
+}
+
+function global:fenablefocusedall {
+
+fdisplayinfo -xtext "Enabling Focused Inbox for all users...this may take a while"
+$null = Set-OrganizationConfig -FocusedInboxOn $true
+
+write-host (Get-OrganizationConfig | select FocusedInboxOn | fl | out-string)
+pause
+
+}
+
 
 	#Mailbox Services 
 function global:fToggleMAPI {
@@ -1731,6 +1854,23 @@ fDisplayInfo -xText "Setting each Mailbox to Accept Mail from Contacts"
 get-mailbox | set-MailboxJunkEmailConfiguration -ContactsTrusted $true
 write-host (get-mailbox | get-MailboxJunkEmailConfiguration | ft identity, ContactsTrusted | format-table | out-string)
 pause
+
+}
+
+# Partner ==========================
+
+function global:fListAllActive {
+
+
+$tenids = (get-msolpartnercontract).tenantid.guid
+
+$xInput = foreach ($ten in $tenids) {get-msoluser -tenantid $ten | ?{$_.licenses -ne $null} | sort licenses | select UserPrincipalName, Licenses| ft UserPrincipalName, Licenses}
+	
+	y
+	
+	write-host ($xInput | format-table | out-string)
+	
+	fExportTXT -xInput $xInput -xFilename "UserList"
 
 }
 
