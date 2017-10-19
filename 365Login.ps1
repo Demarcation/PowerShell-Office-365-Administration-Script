@@ -1147,26 +1147,33 @@ function global:fGrantFullAccessMailbox {
 		$xAutoMap = $false
 	}else{
 		#Default
+		fDisplayInfo -xText "Defaulting Auto Mapping to True"
 		$xAutoMap = $true
 	}
 	$xSendAsYN = fUserPrompt -xQuestion "Would you like to include Send As Permissions? (y/n)"
-	if ($xSendAsYN -eq "y") {
+	$xSendAs = $false
+	if ( ($xSendAsYN -eq "y") -OR ($xSendAsYN -eq "yes")) {
 		$xSendAs = $true
-	}elseif ($xSendAsYN -eq "n") {
-		$xSendAs = $false
+	}elseif ( ($xSendAsYN -eq "n") -OR ($xSendAsYN -eq "no") ) {
+				$xSendAs = $false
 	}else{
 		#Default
+		fDisplayInfo -xText "Defaulting Send As to True"
 		$xSendAs = $true
 	}
+	
 	fDisplayInfo -xText "Adding Mailbox Permission"
 	Add-MailboxPermission -identity $xMailbox -User $xUser -AccessRight fullaccess -InheritanceType all -Automapping $xAutoMap
-	if ($xSendAs = $true) {
-	fDisplayInfo -xText "Setting Send As Permission"
-	Add-RecipientPermission $xMailbox -AccessRights SendAs -Trustee $xUser
+	
+	if ($xSendAs -eq $true) {
+		fDisplayInfo -xText "Setting Send As Permission"
+		Add-RecipientPermission $xMailbox -AccessRights SendAs -Trustee $xUser
 	}
+	
 	fDisplayInfo -xText "Mailbox Permissions:"
 	$xNewMBPerms = Get-MailboxPermission -identity $xMailbox
 	write-host ( $xNewMBPerms | format-table | out-string)
+	
 	fDisplayInfo -xText "Send As Permissions:"
 	$xNewSendAsPerms = Get-RecipientPermission $xMailbox
 	write-host ($xNewSendAsPerms | format-table | out-string)
