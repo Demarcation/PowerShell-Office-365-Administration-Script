@@ -1,6 +1,6 @@
 		<######################################################################
 		365 Powershell Administration System 
-		Copyright (C) 2015  Ashley Unwin, www.AshleyUnwin.com/powershell
+		Copyright (C) 2019  Ashley Unwin, www.AshleyUnwin.com/powershell
 		
 		It is requested that you leave this notice in place when using the
 		Menu System.
@@ -15,15 +15,21 @@
 		######################################################################
 		Known Bugs and Feature Requests:
 		- BUG STATUS-CONFIRMED: Cannot accept company names with space - Cause: Line 61 $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
-		- FEATURE: Rename Account/email
-		- FEATURE: Remove Account
-		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
-		- FEATURE: Remove Dis Group
 		- BUG STATUS-CONFIRMED: fSetDefaultEmailAlias does not work
-		- FEATURE: List all emails - Get-Recipient | Select Name -ExpandProperty EmailAddresses | Select Name,  SmtpAddress
-		- FEATURE: Find Specfic email - Get-Recipient | Select Name -ExpandProperty Emailaddresses | ?{ $_.Smtpaddress -eq $xFindAddress} | select name, smtpaddress
-		- FEATURE: List all mailboxes a user has access to - get-mailboxpermission * -resultsize unlimited | ?{$_.user -match $xImput} | select Idenitity, AccessRights
-		- Feature: make exchange on-site compatible
+		
+		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
+		
+		- FEATURE-COMPLETE: List all mailboxes a user has access to
+		- FEATURE-COMPLETE: Added Send-As to Faull Access on all mailboxes
+		- FEATURE-COMPLETE: Added Warning to Faull Access on all mailboxes
+		- FEATURE-COMPLETE: Message Trace Sender in Mail Flow and Spam
+
+		- FEATURE-REQUEST: Rename Account/email
+		- FEATURE-REQUEST: Remove Account
+		- FEATURE-REQUEST: Remove Dis Group
+		- FEATURE-REQUEST: List all emails - Get-Recipient | Select Name -ExpandProperty EmailAddresses | Select Name,  SmtpAddress
+		- FEATURE-REQUEST: Find Specfic email - Get-Recipient | Select Name -ExpandProperty Emailaddresses | ?{ $_.Smtpaddress -eq $xFindAddress} | select name, smtpaddress
+		- Feature-REQUEST: make exchange on-site compatible
 		######################################################################>
 
 
@@ -51,6 +57,7 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"List Mailboxes (All)"="fListMailboxes"
 								"List Mailboxes (User Only)"="fListUserMailboxes"
 								"List Mailbox Statistics"="fListMailboxStats"
+								"List Mailbox Statistics With Shared"="fListMailboxStatsWithShared"
 								"Set 30day Deleted Items Recovery (All)"="fRecoverDelItem30days"
 								"Toggle Shared Mailbox"="fConvertSharedMailbox"
 								"List Email Forwarding Status"="fCheckForwarding"
@@ -102,6 +109,8 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 	"Mail Flow and Spam"=@{		"List Transport Rule Status"="fGetTranStatus"
 								"Toggle Rule Status"="fToggleTransportRule"
 								"Enable Connection Filter Safe List"="fSetSafelistEnable"
+								"Create Warning Rules"="fcreatewarningrules"
+								"Message Trace (Sender)"="fSenderMessageTrace"								
 								}
 	"Partner"=@{				"List All Active Accounts"="fListAllActive"
 								}
@@ -112,7 +121,7 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 		
 # Control the login process ================================================================
 $global:xLocalUserPath = $env:UserProfile+"\Office365Data" #Define the local path to store user data in - Should NOT end with a '\'
-$global:xCompanyFilePath = "Z:\~Tools\Powershell\companys.csv" #Allow central companys file for multi users
+$global:xCompanyFilePath = "Z:\~Tools\Powershell\companys.csv" #Allow central company.csv file for multi users
 $ErrorActionPreference = 'Stop'
 
 
@@ -795,7 +804,7 @@ function global:fSetPasswordNeverExpireAll {
 
 function global:fListMailboxes {
 	
-	$xMList = get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | sort DisplayName
+	$xMList = get-mailbox | select DisplayName, Alias, UserPrincipalName, PrimarySmtpAddress, RecipientTypeDetails | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | sort DisplayName
 	
 	write-host ( $xMList | format-table | out-string)
 	
@@ -811,10 +820,19 @@ function global:fListUserMailboxes {
 	fExportCSV -xInput $xMList -xFilename "MailboxList"
 }
 
+function global:fListMailboxStatsWithShared {
+	
+	Write-host "Generating Statistics, Please Wait..."
+	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.UserPrincipalName | select DisplayName, TotalItemSize, LastLogonTime, RecipientTypeDetails | sort TotalItemSize} 
+	write-host ( $xMStats | sort TotalItemSize | format-table | out-string)
+		
+	fExportCSV -xInput $xMStats -xFilename "MailboxStats"
+}
+
 function global:fListMailboxStats {
 	
 	Write-host "Generating Statistics, Please Wait..."
-	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch'} | foreach-object { get-mailboxstatistics -identity $_.Identity | select DisplayName, TotalItemSize, LastLogonTime }
+	$xMStats = get-mailbox | where-object {$_.Alias -NOTMATCH 'DiscoverySearch' -and $_.RecipientTypeDetails -NOTMATCH 'SharedMailbox'} | foreach-object { get-mailboxstatistics -identity $_.UserPrincipalName | select DisplayName, TotalItemSize, LastLogonTime | sort TotalItemSize} 
 	write-host ( $xMStats | sort TotalItemSize | format-table | out-string)
 		
 	fExportCSV -xInput $xMStats -xFilename "MailboxStats"
@@ -963,7 +981,7 @@ function global:fRecoverDelItem30days {
 			fDisplayInfo -xText "Collecting Mailbox List"
 			$xMailboxes = Get-Mailbox -ResultSize unlimited -Filter {(RecipientTypeDetails -eq 'UserMailbox')} 
 			fDisplayInfo -xText "Adjusting Deleted Items Recovery to 30 days"
-			$xNull = $xMailboxes | Set-Mailbox -RetainDeletedItemsFor 30
+			$xNull = $xMailboxes.UserPrincipalName | Set-Mailbox -RetainDeletedItemsFor 30
 			fDisplayInfo -xText "Gathering Results"
 			$xResults = Get-Mailbox -ResultSize unlimited -Filter {(RecipientTypeDetails -eq 'UserMailbox')} | Select Displayname, RetainDeletedItemsFor | sort displayname
 			write-host ( $xResults | format-table | out-string)
@@ -1203,6 +1221,8 @@ function global:fGrantSendAsPerms {
 
 function global:fGrantFullAccessMailboxAllMailboxes {
 	
+	fDisplayInfo -xText "WARNING: You are about to grant access to ALL mailboxes" -xColor "red"
+	
 	$xUser = fCollectIdentity -xText "Enter the User who would like the access"
 	if ($xUser -eq $false) {Return $false}
 	$xAutoMapYN = fUserPrompt -xQuestion "Would you like to enable AutoMapping? (y/n)"
@@ -1214,11 +1234,21 @@ function global:fGrantFullAccessMailboxAllMailboxes {
 		#Default
 		$xAutoMap = $true
 	}
+		
+	$xMailboxes = get-mailbox 
+	$xUserPermList = @()
 	
-	get-mailbox | where {$_.name -NOTMATCH "Discovery"} | Add-MailboxPermission -User $xUser -AccessRight fullaccess -InheritanceType all -Automapping $xAutoMap
-	$xUserPermList = get-mailbox | get-mailboxpermission -User $xUser | where-object {$_.User -MATCH $xUser} | sort Identity
+	foreach ( $xMailbox in $xMailboxes) { 
+		if ($xMailbox.name -NOTMATCH "Discovery") { 
+			add-mailboxpermission -identity $xMailbox.PrimarySMTPAddress -User $xUser -accessright fullaccess -inheritancetype all -automapping $false 
+			$xUserPermList += get-mailboxpermission -identity $xMailbox.PrimarySMTPAddress -User $xUser
+			Add-RecipientPermission -identity $xMailbox.UserPrincipalName -AccessRights SendAs -Trustee $xUser -Confirm:$false
+		} 
+	}
 	
-	write-host ( $xUserPermList | format-table | out-string)
+	clear
+	
+	write-host ( $xUserPermList | sort Identity | format-table | out-string)
 	
 	$xExpCSV = fUserPrompt -xQuestion "Would you like to export this as CSV? (y/n)"
 	if ($xExpCSV -eq "y") {
@@ -1259,15 +1289,25 @@ fExportCSV -xInput $xPermsList -xFilename "PermsList"
 	#Clutter
 function global:fshowclutterall {
 
-$xhash=$null
-$xhash=@{}
 fdisplayinfo -xtext "Collecting Mailbox Data"
 $mailboxes=get-mailbox
 fdisplayinfo -xtext "Collecting Clutter Data...This may take a while"
-foreach($xmailbox in $mailboxes) {$xhash.add($xmailbox.alias,(get-clutter -identity $xmailbox.alias.tostring()).isenabled)}
-write-host ($xhash | ft | out-string )
+$xhash=$null
+$xhash=@{}
+foreach($xmailbox in $mailboxes) {
+		if 	( $xmailbox.alias -Like "DiscoverySearch*" ) {
+				#write-host "SKIPPING: "$xmailbox.UserPrincipalName
+			} else {
+				#write-host "Processing: "$xmailbox.UserPrincipalName
+				$xhash.add($xmailbox.UserPrincipalName,(get-clutter -identity $xmailbox.UserPrincipalName).isenabled)
+			}
+	}
 
 $xOutObject = $xhash.getenumerator() | foreach {new-object psobject -Property @{Name = $_.name;Enabled=$_.value}}
+
+clear
+
+write-host ($xhash | sort Name | ft | out-string )
 
 fExportCSV -xInput $xoutobject -xFilename "ClutterList"
 
@@ -1276,7 +1316,13 @@ fExportCSV -xInput $xoutobject -xFilename "ClutterList"
 function global:fdisableclutterall {
 
 fdisplayinfo -xtext "Disabling Clutter for all users...this may take a while"
-$null = get-mailbox | set-clutter -Enable $false
+
+$mailboxes=get-mailbox
+
+foreach($xmailbox in $mailboxes) {
+		$null = set-clutter -Identity $xmailbox -Enable $false
+		write-host "Disabling: "$xmailbox.UserPrincipalName
+	}
 
 fshowclutterall
 
@@ -1607,15 +1653,16 @@ PARAM(
 			Write-host $($_.Displayname)
 			if ($($_.RequireSenderAuthenticationEnabled) -eq $true) {Write-host "*Internal Emails Only*"}
 			write-host "===========" 
-			Get-DistributionGroupMember $($_.DisplayName) | foreach-object {
-				write-host $_.DisplayName
-			}
+			#Get-DistributionGroupMember $($_.DisplayName) | foreach-object {
+			#	write-host $_.DisplayName
+			#}
+			write-host (Get-DistributionGroupMember $($_.PrimarySmtpAddress) | select DisplayName | sort DisplayName | format-table | out-string)
 					write-host "`n" 
 		}
 		pause
 	}else{
 		write-host $xGroupName"`n==========="
-		write-host (Get-DistributionGroupMember $xGroupName | select DisplayName | format-table | out-string)
+		write-host (Get-DistributionGroupMember $xGroupName | select DisplayName | sort DisplayName | format-table | out-string)
 	}	
 	
 }
@@ -1847,20 +1894,70 @@ function global:fToggleTransportRule {
 	fStoreMainMenu -xRestore 1
 }
 
-
 function global:fSetSafelistEnable {
 
-fDisplayInfo -xText "Setting the Organisation Connection Filter"
+	fDisplayInfo -xText "Setting the Organisation Connection Filter"
 
-Set-HostedConnectionFilterPolicy -Identity Default -EnableSafeList $true
-write-host (Get-HostedConnectionFilterPolicy -Identity Default | select Identity, EnableSafeList | format-table | out-string)
-pause
+	Set-HostedConnectionFilterPolicy -Identity Default -EnableSafeList $true
+	write-host (Get-HostedConnectionFilterPolicy -Identity Default | select Identity, EnableSafeList | format-table | out-string)
+	pause
 
-fDisplayInfo -xText "Setting each Mailbox to Accept Mail from Contacts"
+	fDisplayInfo -xText "Setting each Mailbox to Accept Mail from Contacts"
 
-get-mailbox | set-MailboxJunkEmailConfiguration -ContactsTrusted $true
-write-host (get-mailbox | get-MailboxJunkEmailConfiguration | ft identity, ContactsTrusted | format-table | out-string)
-pause
+	get-mailbox | set-MailboxJunkEmailConfiguration -ContactsTrusted $true
+	write-host (get-mailbox | get-MailboxJunkEmailConfiguration | ft identity, ContactsTrusted | format-table | out-string)
+	pause
+
+}
+
+function global:fcreatewarningrules {
+
+	fDisplayInfo -xText "Setting Warning Rules. Please review in Exchange Admin Centre after setup"
+	
+	$bodywords = "forms.office.com", "validate email", "office team", "verify email", "confirm your account", "office 365"
+
+	$headerwords = "onmicrosoft", "microsoft", "outlook"
+
+	$disclaimer = '<font color="red">***External Email***<br/> This message may or may not be legitimate, please treat links/attachments with caution, especially if they ask you to enter login credentials.<br/> If you have any doubts, please forward to support@tetrabyte.com for verification.</font><br/> ---<br/><br/>'
+
+	new-transportrule -Name "External Warning - Body" -FromScope NotInOrganization -SubjectOrBodyContainsWords $bodywords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimer -ApplyHtmlDisclaimerFallbackAction wrap 
+
+	new-transportrule -Name "External Warning - Header" -FromScope NotInOrganization -HeaderContainsMessageHeader from -HeaderContainsWords $headerwords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimer -ApplyHtmlDisclaimerFallbackAction wrap
+
+	fGetTranStatus
+
+}
+
+function global:fSenderMessageTrace {
+
+fDisplayInfo -xText "Limited to 50,000 results over 7 days"
+
+$dateEnd = get-date
+
+$xMinusDays = fUserPrompt -xQuestion "How many day past do you wish to search (Max 7): "
+if ($xMinusDays -gt 7) { 
+	$xMinusDays = 7
+	fDisplayInfo -xText "Limited to 50,000 results over 7 days - Setting 7 Days"
+	}
+	
+$dateStart = $dateEnd.AddDays(0-$xMinusDays)
+
+$page = 1
+$SenderAddress = "*"
+$SenderAddress = fUserPrompt -xQuestion "Enter the Sender Address in Format: sender@domain.com or *@domain.com"
+
+while ($page -lt 10) {
+	fDisplayInfo -xText "Processing Part $page of 10"
+	$xVar = Get-MessageTrace -pagesize 5000 -page $page -StartDate $dateStart -EndDate $dateEnd | where{$_.SenderAddress -like $SenderAddress} | Select-Object Received, SenderAddress, RecipientAddress, Subject, Status, FromIP, Size
+	$xResult += $xVar
+	$page++
+	}
+
+$xResult | Out-GridView
+
+fDisplayInfo -xText "Complete"
+
+fExportCSV -xInput $xResult -xFilename "MessageTrace"
 
 }
 
