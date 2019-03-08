@@ -20,8 +20,8 @@
 		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
 		
 		- FEATURE-COMPLETE: List all mailboxes a user has access to
-		- FEATURE-COMPLETE: Added Send-As to Faull Access on all mailboxes
-		- FEATURE-COMPLETE: Added Warning to Faull Access on all mailboxes
+		- FEATURE-COMPLETE: Added Send-As to Full Access on all mailboxes
+		- FEATURE-COMPLETE: Added Warning to Full Access on all mailboxes
 		- FEATURE-COMPLETE: Message Trace Sender in Mail Flow and Spam
 
 		- FEATURE-REQUEST: Rename Account/email
