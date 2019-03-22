@@ -9,11 +9,17 @@ You can use 'Use-Admin' to access the main menu.
 
 ==Quick Loading of the script:
 
-
 For ease of access try saving a shortcut
 "Start powershell.exe -executionpolicy unrestricted -File C:\PowershellFiles\365Login.ps1"
 
-Else, if you already have 'executionpolicy unrestricted' set, you can run 'Invoke-Item $profile' and add 'C:\PowershellFiles\365Login.ps1' into your profile to be automatically loaded every time you open Powershell.
+Else, if you already have 'executionpolicy unrestricted' set, you can run 'Invoke-Item $profile' and add the below into your profile to be automatically loaded every time you open Powershell.
+
+###
+    $global:xCompanyFilePath = "Z:\~Tools\Powershell\companys.csv" #Allow central company.csv file for multi users
+    $xPath = "C:\Powershell\365Login.ps1" # Adjust this for the location of the file
+    import-module $xPath
+    Write-host "365 Module Imported"
+###
 
 
 ==Quick Access Tips:
