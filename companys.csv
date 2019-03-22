@@ -1,3 +1,3 @@
-Company,adminuser
-Companyname1,administrator@company1.co.uk
-Companyname2,administrator@company2.co.uk
+Company,adminuser,mfa
+Companyname1,administrator@company1.co.uk,0
+Companyname2,administrator@company2.co.uk,0
