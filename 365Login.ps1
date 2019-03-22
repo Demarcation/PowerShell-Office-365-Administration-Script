@@ -16,13 +16,11 @@
 		Known Bugs and Feature Requests:
 		- BUG STATUS-CONFIRMED: Cannot accept company names with space - Cause: Line 61 $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
 		- BUG STATUS-CONFIRMED: fSetDefaultEmailAlias does not work
+		- BUG STATUS-RESOLVED: CRITICAL setup of msi fails. 
 		
 		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
 		
-		- FEATURE-COMPLETE: List all mailboxes a user has access to
-		- FEATURE-COMPLETE: Added Send-As to Full Access on all mailboxes
-		- FEATURE-COMPLETE: Added Warning to Full Access on all mailboxes
-		- FEATURE-COMPLETE: Message Trace Sender in Mail Flow and Spam
+		- FEATURE-COMPLETE: List all mailboxes a user has access to - get-mailboxpermission * -resultsize unlimited | ?{$_.user -match $xImput} | select Idenitity, AccessRights
 
 		- FEATURE-REQUEST: Rename Account/email
 		- FEATURE-REQUEST: Remove Account
@@ -121,10 +119,8 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 		
 # Control the login process ================================================================
 $global:xLocalUserPath = $env:UserProfile+"\Office365Data" #Define the local path to store user data in - Should NOT end with a '\'
-$global:xCompanyFilePath = "Z:\~Tools\Powershell\companys.csv" #Allow central company.csv file for multi users
+if (!$xCompanyFilePath) {$global:xCompanyFilePath = $xLocalUserPath."\companys.csv"} #Set Default location for Company File if user has not pre-set in $profile
 $ErrorActionPreference = 'Stop'
-
-
 
 
 function global:start-login{
@@ -153,18 +149,57 @@ function global:start-login{
 		if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Menu System"}
 	}
 	
-		
-	fClear-Login	
 	
+	#Import Powershell Modules, Install if missing
+	
+	fDisplayInfo -xText "Checking/Importing Powershell Modules" -xText2 "Please wait ..."
+	
+	#Only run if any of these files are missing, this check speeds up the std setup times
+	if ( ( (test-path $global:xLocalUserPath"\MSOnline.txt") -AND (test-path $global:xLocalUserPath"\PSGallery.txt") -AND (test-path $global:xLocalUserPath"\AzureADPreview.txt") ) -eq $false ){
+	
+		fDisplayInfo -xText "Checking PSGallery"
+		if ((test-path $global:xLocalUserPath"\PSGallery.txt") -eq $false) {
+			if ( $psgallery.InstallationPolicy -ne "Trusted") {
+				Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
+				set-content -Path $global:xLocalUserPath"\PSGallery.txt" -Value ($null)
+			}
+		}
+		
+		fDisplayInfo -xText "Checking MSOnline"
+		Import-Module MSOnline -ErrorAction SilentlyContinue
+		if ((test-path $global:xLocalUserPath"\MSOnline.txt") -eq $false) {
+			if ( (get-module msonline) -eq $null ) {
+				fDisplayInfo -xText "It appears you don't have Microsoft Online Module installed" -xText2 "Let's Install that now"
+				Install-module MSOnline -Confirm:$false
+				Import-Module MSOnline
+				set-content -Path $global:xLocalUserPath"\MSOnline.txt" -Value ($null)
+				$xFlagRestart = 1
+			}
+		}
+		
+		fDisplayInfo -xText "Chacking AzureADPreview"
+		Import-Module AzureADPreview -ErrorAction SilentlyContinue
+		if ((test-path $global:xLocalUserPath"\AzureADPreview.txt") -eq $false) {
+			if ( (get-module AzureADPreview) -eq $null ) {
+				fDisplayInfo -xText "It appears you don't have AzureADPreview Module installed" -xText2 "Let's Install that now"
+				Install-module AzureADPreview -Confirm:$false
+				Import-Module AzureADPreview
+				set-content -Path $global:xLocalUserPath"\AzureADPreview.txt" -Value ($null)
+				$xFlagRestart = 1
+			}
+		}
+
+		If ( $xFlagRestart -eq "1" ) {
+			fDisplayInfo -xText "We've now installed the modules" -xText2 "You'll need to restart powershell" -xTime 5
+			exit	
+		}
+	}
+		
 	cls
 	fLoginMenu	
 }
 
 function global:fLoginMenu{
-	# Requires a CSV File in with the columns company,adminuser
-	if (test-path $global:xLocalUserPath) {} Else {
-		new-item $global:xLocalUserPath -type Directory
-	}	
 	
 	if ((test-path $global:xCompanyFilePath ) -ne $true)  {
 		#If the file is missing locally and on the share download the demo data from github
@@ -208,6 +243,8 @@ PARAM(
 	$global:xCompany = $global:xCompany.company
 	$global:xService = $global:csv | where-object {$_.company -eq $xCompany} | select Service
 	$global:xService = $global:xService.Service
+	$global:xMFA = $global:csv | where-object {$_.company -eq $xCompany} | select mfa
+	$global:xMFA = $global:xMFA.mfa
 	
 	$passfile = $global:xLocalUserPath+"\"+$global:xCompany+"365pass.txt"
 	if (test-path $passfile) {
@@ -240,56 +277,25 @@ PARAM(
 [string]$xPass,
 [string]$xCompany
 )
+
+	#This script requires Microsoft.Online.CSE.PSModule.Client installed if using MFA
 	
-	#This script requires Microsoft Online Services Sign-In Assistant for IT Professionals installed
-	$i = 0
-	while ((test-path $env:programfiles'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
-		fDisplayInfo -xText "It appears you don't have Microsoft Online Services Sign-In Assistant for IT Professionals installed" -xText2 "Let's Install that now"
-		$source = "http://download.microsoft.com/download/5/0/1/5017D39B-8E29-48C8-91A8-8D0E4968E6D4/en/msoidcli_64.msi" 
-		$destination = $global:xLocalUserPath+"\Microsoft Online Services Sign-In Assistant for IT Professionals RTW.msi"
-		if ($PSversiontable.PSVersion.Major -lt 3) {
-			$web=New-Object System.Net.WebClient
-			$web.DownloadFile($source,$destination)
+	if ($xMFA -eq "1") {
+				
+		if ( Get-Command -Name Connect-EXOPSSession -errorAction SilentlyContinue ) {
+			Connect-EXOPSSession -UserPrincipalName $xAdminUser
 		} else {
-			Invoke-WebRequest $source -OutFile $destination
+		fDisplayInfo -xText "It appears you don't have Microsoft.Online.CSE.PSModule.Client installed" -xText2 "Let's Install that now" -xTime 3
+		$source = "https://cmdletpswmodule.blob.core.windows.net/exopsmodule/Microsoft.Online.CSE.PSModule.Client.application" 
+		$ie = New-Object -com internetexplorer.application; 
+		$ie.visible = $true; 
+		$ie.navigate($source);
+		exit
 		}
-		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Online Services Sign-In Assistant Download Failed"}
-		if ((test-path $env:programfiles+'\Common Files\microsoft shared\Microsoft Online Services') -ne $true) {
-			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	
-			$i++
-			if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Microsoft Online Services Sign-In Assistant"}
-			pause
-		}
-	}
-	
-	#This script requires Azure Active Directory Module for Windows PowerShell installed
-	Import-Module MSOnline -ErrorAction SilentlyContinue
-	$i = 0
-	while ((Get-Module -Name MSOnline) -eq $null) {
-		fDisplayInfo -xText "It appears you don't have Azure Active Directory Module for Windows PowerShell installed" -xText2 "Let's Install that now" -xTime 3
-		$source = "https://bposast.vo.msecnd.net/MSOPMW/Current/amd64/AdministrationConfig-en.msi" 
-		$destination = $global:xLocalUserPath+"\Azure Active Directory Module for Windows PowerShell.msi"
-		if ($PSversiontable.PSVersion.Major -lt 3) {
-			$web=New-Object System.Net.WebClient
-			$web.DownloadFile($source,$destination)
-		} else {
-			Invoke-WebRequest $source -OutFile $destination
-		}
-		if (test-path $destination) {Invoke-Item $destination} else {Return "Error Azure Active Directory Module Download Failed"}
-		fDisplayInfo -xText "Please complete the setup before continuing" -xtime 5
-		pause
-		Import-Module MSOnline  -ErrorAction SilentlyContinue
-		if ((Get-Module -Name MSOnline) -eq $null) {
-			fDisplayInfo -xText "You are required to install Microsoft Online Services Sign-In Assistant to run this script" -xtext2 "Please Complete the Installer before continuing"	-xTime 3
-			$i++
-			if ($i -eq 3) {Return "FATAL ERROR: Failed to Install Azure Active Directory Module"}
-			pause
-		}
-		
 	}
 	
  	# If username has been set, login
-    if ($xPass)	{
+    if ($xPass -AND $xMFA -eq "0")	{
 		Write-host "Connecting to"$xCompany -Fore Green
 		Write-host "Creating Credential Object" -Fore Green
 		$global:O365Cred=New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $xAdminUser, ($xPass | ConvertTo-SecureString) -ErrorAction stop
