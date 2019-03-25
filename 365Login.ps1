@@ -16,7 +16,7 @@
 		Known Bugs and Feature Requests:
 		- BUG STATUS-CONFIRMED: Cannot accept company names with space - Cause: Line 61 $xMenuHash.add($_.Company,"fSetupCompany -xCompany "+$_.company) - Resolution: 
 		- BUG STATUS-CONFIRMED: fSetDefaultEmailAlias does not work
-		- BUG STATUS-RESOLVED: CRITICAL setup of msi fails. 
+		- BUG STATUS-CONFIRMED: CRITICAL setup of msi fails. 
 		
 		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
 		
@@ -162,6 +162,8 @@ function global:start-login{
 			if ( $psgallery.InstallationPolicy -ne "Trusted") {
 				Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
 				set-content -Path $global:xLocalUserPath"\PSGallery.txt" -Value ($null)
+			}else{
+				set-content -Path $global:xLocalUserPath"\PSGallery.txt" -Value ($null)
 			}
 		}
 		
@@ -174,7 +176,10 @@ function global:start-login{
 				Import-Module MSOnline
 				set-content -Path $global:xLocalUserPath"\MSOnline.txt" -Value ($null)
 				$xFlagRestart = 1
+			}else{
+				set-content -Path $global:xLocalUserPath"\MSOnline.txt" -Value ($null)
 			}
+			
 		}
 		
 		fDisplayInfo -xText "Chacking AzureADPreview"
@@ -186,6 +191,8 @@ function global:start-login{
 				Import-Module AzureADPreview
 				set-content -Path $global:xLocalUserPath"\AzureADPreview.txt" -Value ($null)
 				$xFlagRestart = 1
+			}else{
+				set-content -Path $global:xLocalUserPath"\AzureADPreview.txt" -Value ($null)
 			}
 		}
 
@@ -1983,9 +1990,6 @@ $xInput = foreach ($ten in $tenids) {get-msoluser -tenantid $ten | ?{$_.licenses
 	fExportTXT -xInput $xInput -xFilename "UserList"
 
 }
-
-
-
 
 
 if (!$global:ForceLoginFirst) {$global:ForceLoginFirst = $false}
