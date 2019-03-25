@@ -1117,7 +1117,7 @@ function global:fSetDefaultEmailAlias {
 	
 	foreach ($email in $xMailbox.EmailAddresses) {
 		if ($email -cmatch "SMTP:") {
-			$xMailBox.EmailAddresses[$i] = "smtp:ash@sussexcommunity.org.uk"
+			$xMailBox.EmailAddresses[$i] = "smtp:email@email.com"
 		} 
 		$i++ 
 	}
@@ -1209,7 +1209,7 @@ function global:fGrantFullAccessMailbox {
 	
 	if ($xSendAs -eq $true) {
 		fDisplayInfo -xText "Setting Send As Permission"
-		Add-RecipientPermission $xMailbox -AccessRights SendAs -Trustee $xUser
+		Add-RecipientPermission $xMailbox -AccessRights SendAs -Trustee $xUser -Confirm:$false
 	}
 	
 	fDisplayInfo -xText "Mailbox Permissions:"
@@ -1942,7 +1942,7 @@ function global:fcreatewarningrules {
 
 	$headerwords = "onmicrosoft", "microsoft", "outlook"
 
-	$disclaimer = '<font color="red">***External Email***<br/> This message may or may not be legitimate, please treat links/attachments with caution, especially if they ask you to enter login credentials.<br/> If you have any doubts, please forward to support@tetrabyte.com for verification.</font><br/> ---<br/><br/>'
+	$disclaimer = '<font color="red">***External Email***<br/> This message may or may not be legitimate, please treat links/attachments with caution, especially if they ask you to enter login credentials.<br/> If you have any doubts, please forward to support for verification.</font><br/> ---<br/><br/>'
 
 	new-transportrule -Name "External Warning - Body" -FromScope NotInOrganization -SubjectOrBodyContainsWords $bodywords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimer -ApplyHtmlDisclaimerFallbackAction wrap 
 
@@ -2001,6 +2001,9 @@ $xInput = foreach ($ten in $tenids) {get-msoluser -tenantid $ten | ?{$_.licenses
 	fExportTXT -xInput $xInput -xFilename "UserList"
 
 }
+
+
+
 
 
 if (!$global:ForceLoginFirst) {$global:ForceLoginFirst = $false}
