@@ -959,22 +959,33 @@ function global:fConvertSharedMailbox {
 	$xUser = fCollectIdentity -xText "Enter the mailbox you would like to convert:"
 	if ($xUser -eq $false) {Return $false}
 
-	$xStatus = Get-mailbox -identity $xUser | select RecipientTypeDetails
+	$xStatus = (Get-mailbox -identity $xUser).RecipientTypeDetails
 	
-	if (($xStatus.RecipientTypeDetails) -eq "UserMailbox") {
-		
-		fDisplayInfo -xText "Converting to Shared Mailbox"
-		Set-mailbox -identity $xUser -Type Shared	
-			
-	} else { 
+	fDisplayInfo -xText "The Mailbox is Currently $xStatus" -$xColor "Red"
 	
-		fDisplayInfo -xText "Converting to User Mailbox"
-		Set-mailbox -identity $xUser -Type Regular
-		
+	$xContinue = fUserPrompt -xQuestion "Would you like to Convert? (y/n)"
+	
+	if (($xContinue -eq "y") -OR ($xContinue -eq "yes")) {
+		if ($xStatus -eq "UserMailbox") {
+			while ( (get-mailbox -identity $xUser).RecipientTypeDetails -ne "SharedMailbox" ) {
+				fDisplayInfo -xText "Converting to Shared Mailbox"
+				Set-mailbox -identity $xUser -Type Shared
+				start-sleep 5
+			}
+		} elseif ($xStatus -eq "SharedMailbox") { 
+			while ( (get-mailbox -identity $xUser).RecipientTypeDetails -ne "UserMailbox" ) {
+				fDisplayInfo -xText "Converting to User Mailbox"
+				Set-mailbox -identity $xUser -Type Regular
+				start-sleep 5
+			}
+		}
+	} else {
+		fDisplayInfo -xText "You have chosen not to proceed, Mailbox will remain $xStatus"  -$xColor "Red" -xTime 3
+		return
 	}
 	
-	start-sleep 3
-	write-host ( get-mailbox -identity $xUser | select Displayname, RecipientTypeDetails | format-list | out-string )
+	$xNewStatus = (Get-mailbox -identity $xUser).RecipientTypeDetails
+    fDisplayInfo -xText "The Mailbox is now $xNewStatus" -$xColor "Red"
 	pause
 
 }
