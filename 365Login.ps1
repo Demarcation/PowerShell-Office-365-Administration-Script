@@ -961,7 +961,7 @@ function global:fConvertSharedMailbox {
 
 	$xStatus = (Get-mailbox -identity $xUser).RecipientTypeDetails
 	
-	fDisplayInfo -xText "The Mailbox is Currently $xStatus" -$xColor "Red"
+	fDisplayInfo -xText "The Mailbox is Currently $xStatus" -xColor "Red"
 	
 	$xContinue = fUserPrompt -xQuestion "Would you like to Convert? (y/n)"
 	
@@ -980,7 +980,7 @@ function global:fConvertSharedMailbox {
 			}
 		}
 	} else {
-		fDisplayInfo -xText "You have chosen not to proceed, Mailbox will remain $xStatus"  -$xColor "Red" -xTime 3
+		fDisplayInfo -xText "You have chosen not to proceed, Mailbox will remain $xStatus"  -xColor "Red" -xTime 3
 		return
 	}
 	
