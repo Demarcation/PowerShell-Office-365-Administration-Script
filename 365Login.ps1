@@ -985,7 +985,7 @@ function global:fConvertSharedMailbox {
 	}
 	
 	$xNewStatus = (Get-mailbox -identity $xUser).RecipientTypeDetails
-    fDisplayInfo -xText "The Mailbox is now $xNewStatus" -$xColor "Red"
+    fDisplayInfo -xText "The Mailbox is now $xNewStatus" -xColor "Red"
 	pause
 
 }
