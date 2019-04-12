@@ -100,9 +100,10 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"View External Auth Settings"="fViewDistExtAuth"
 								"Toggle External Auth Settings"="fToggleDistExtAuth"
 								}
-	"MSOnline Org"=@{			"List Partner Information"="fViewPartnerInfo"
+	"Organisation"=@{			"List Partner Information"="fViewPartnerInfo"
 								"List Domain Info"="fVeiwDomain"
 								"List Licencing Status"="fGetMsolAccountSku"
+								"Setup MFA Policy"="fMFAOAuth2"
 								}
 	"Mail Flow and Spam"=@{		"List Transport Rule Status"="fGetTranStatus"
 								"Toggle Rule Status"="fToggleTransportRule"
@@ -291,6 +292,7 @@ PARAM(
 				
 		if ( Get-Command -Name Connect-EXOPSSession -errorAction SilentlyContinue ) {
 			Connect-EXOPSSession -UserPrincipalName $xAdminUser
+			Connect-MsolService 
 		} else {
 		fDisplayInfo -xText "It appears you don't have Microsoft.Online.CSE.PSModule.Client installed" -xText2 "Let's Install that now" -xTime 3
 		$source = "https://cmdletpswmodule.blob.core.windows.net/exopsmodule/Microsoft.Online.CSE.PSModule.Client.application" 
@@ -581,6 +583,7 @@ PARAM(
 	
 	if ($xPossible -eq $null) {
 		#if the first option fails, try searching just the first few char's of the string
+		# this seems to error if less that 5 chars AND invalid - i'll fix that one day
 		$xPossible2 = $xGetRecipient | ?{ ($_.Alias -match $xInput.substring(0,5)) -OR ($_.DisplayName -match $xInput.substring(0,5)) }  -ErrorAction silentlycontinue
 	} 
 	if (($xPossible -eq $null) -and ($xPossible2 -eq $null)) {
@@ -1213,11 +1216,11 @@ function global:fGrantFullAccessMailbox {
 	}
 	
 	fDisplayInfo -xText "Mailbox Permissions:"
-	$xNewMBPerms = Get-MailboxPermission -identity $xMailbox
+	$xNewMBPerms = Get-MailboxPermission -identity $xMailbox | where {$_.user -NOTMATCH "NT Authority"} | where {$_.User -NOTMATCH "Domain Admins"}| where {$_.user -NOTMATCH "Enterprise Admins"} | where {$_.user -NOTMATCH "Organization Management"} | where {$_.user -NOTMATCH "Public Folder Management"} | where {$_.user -NOTMATCH "Exchange Servers"} | where {$_.user -NOTMATCH "Exchange trusted Subsystem"} | where {$_.user -NOTMATCH "Managed Availability Servers"} | where {$_.user -NOTMATCH "Administrator"}
 	write-host ( $xNewMBPerms | format-table | out-string)
 	
 	fDisplayInfo -xText "Send As Permissions:"
-	$xNewSendAsPerms = Get-RecipientPermission $xMailbox
+	$xNewSendAsPerms = Get-RecipientPermission $xMailbox | where {$_.Trustee -NOTMATCH "NT Authority"} | where {$_.Trustee -NOTMATCH "Domain Admins"}| where {$_.Trustee -NOTMATCH "Enterprise Admins"} | where {$_.Trustee -NOTMATCH "Organization Management"} | where {$_.Trustee -NOTMATCH "Public Folder Management"} | where {$_.Trustee -NOTMATCH "Exchange Servers"} | where {$_.Trustee -NOTMATCH "Exchange trusted Subsystem"} | where {$_.Trustee -NOTMATCH "Managed Availability Servers"} | where {$_.Trustee -NOTMATCH "Administrator"} 
 	write-host ($xNewSendAsPerms | format-table | out-string)
 	
 	fDisplayInfo -xText "Would you like to export Mailbox Permissions List"
@@ -1674,7 +1677,7 @@ PARAM(
 )
 	if (!$xGroupName) {
 		Get-DistributionGroup | sort DisplayName | foreach-object {
-			Write-host $($_.Displayname)
+			Write-host $($_.PrimarySmtpAddress)
 			if ($($_.RequireSenderAuthenticationEnabled) -eq $true) {Write-host "*Internal Emails Only*"}
 			write-host "===========" 
 			#Get-DistributionGroupMember $($_.DisplayName) | foreach-object {
@@ -1875,6 +1878,15 @@ function global:fVeiwDomain {
 function global:fGetMsolAccountSku {
 	write-host (Get-MsolAccountSku | Format-Table | Out-String)
 	pause
+}
+
+function global:fMFAOAuth2 {
+
+Get-OrganizationConfig | Format-Table Name,OAuth* -Auto
+set-OrganizationConfig -OAuth2ClientProfileEnabled $true
+start-sleep 5
+Get-OrganizationConfig | Format-Table Name,OAuth* -Auto
+pause
 }
 
 #Mail Flow and Spam =======================================================================================
