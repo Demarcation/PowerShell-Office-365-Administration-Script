@@ -58,7 +58,8 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"List Mailbox Statistics With Shared"="fListMailboxStatsWithShared"
 								"Set 30day Deleted Items Recovery (All)"="fRecoverDelItem30days"
 								"Toggle Shared Mailbox"="fConvertSharedMailbox"
-								"List Email Forwarding Status"="fCheckForwarding"
+								"Email Forwarding List Status"="fCheckForwarding"
+								"Email Forwarding Change Status"="fSetMailboxForwarding"
 								"Toggle Access to Services"=@{	"Display Mailbox Access Status"="fDisplayCASMailboxStatus"
 																"Toggle MAPI Access"="fToggleMAPI"
 																"Toggle OWA Access"="fToggleOWA"
@@ -72,7 +73,6 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 															"Add Mailbox Email Alias"="fAddMailboxEmailAlias"
 															"Set Default Mailbox Alias"="fSetDefaultEmailAlias"
 															}
-								"Change Forwarding Status"="fSetMailboxForwarding"
 								"Add Shared Mailbox"="fAddSharedMailbox"
 								"Shared Mailbox Copy to Sent (Single Mailbox)"="fSingleSharedSentItemsCopy"
 								"Shared Mailbox Copy to Sent (All Mailboxes)"="fAllSharedSentItemsCopy"
@@ -104,6 +104,7 @@ $global:MenuHash2=@{ "Users"=@{		"Password Reset"="fResetUserPasswords"
 								"List Domain Info"="fVeiwDomain"
 								"List Licencing Status"="fGetMsolAccountSku"
 								"Setup MFA Policy"="fMFAOAuth2"
+								"Setup Encrypted Emails"="fAadrmSetup"
 								}
 	"Mail Flow and Spam"=@{		"List Transport Rule Status"="fGetTranStatus"
 								"Toggle Rule Status"="fToggleTransportRule"
@@ -1756,16 +1757,16 @@ function global:fToggleDistExtAuth {
 function global:fAddUserDistGroup {
 	fStoreMainMenu -xRestore 0
 	$xDistMenuHash = New-Object System.Collections.HashTable
-	Get-DistributionGroup | sort-object Name | select Name | foreach-object {
-			$xDistMenuHash.add($_.Name,"write-output "+$_.Name)
+	Get-DistributionGroup | sort-object Name | select PrimarySmtpAddress | foreach-object {
+			$xDistMenuHash.add($_.PrimarySmtpAddress,"write-output "+$_.PrimarySmtpAddress)
 		}
-	[string]$xGroupName  = use-menu -MenuHash $xDistMenuHash -Title "Select a group" -NoSplash 1
+	[string]$xGroupPrimarySmtpAddress  = use-menu -MenuHash $xDistMenuHash -Title "Select a group" -NoSplash 1
 	
 	$xAdd = "y"
 	while ($xAdd -eq "y") {
 		$xMember = fCollectIdentity -xText "Who would you like to add:"
 		if ($xMember -ne $false) {
-			Add-DistributionGroupMember $xGroupName -Member $xMember -BypassSecurityGroupManagerCheck
+			Add-DistributionGroupMember $xGroupPrimarySmtpAddress -Member $xMember -BypassSecurityGroupManagerCheck -Confirm:$false
 		} else { 
 			fDisplayInfo -xText "Quitting" 
 			fStoreMainMenu -xRestore 1
@@ -1774,7 +1775,7 @@ function global:fAddUserDistGroup {
 		}
 		$xAdd = fUserPrompt -xQuestion "Would you like to add another? (y/n)"
 	}
-	fListDistMembers -xGroupName $xGroupName
+	fListDistMembers -xGroupName $xGroupPrimarySmtpAddress
 	pause
 	fStoreMainMenu -xRestore 1
 }
@@ -1782,20 +1783,20 @@ function global:fAddUserDistGroup {
 function global:fRemoveUserDistGroup {
 	fStoreMainMenu -xRestore 0
 	$xDistMenuHash = New-Object System.Collections.HashTable
-	Get-DistributionGroup | sort-object Name | select Name | foreach-object {
-			$xDistMenuHash.add($_.Name,"write-output "+$_.Name)
+	Get-DistributionGroup | sort-object Name | select PrimarySmtpAddress | foreach-object {
+			$xDistMenuHash.add($_.PrimarySmtpAddress,"write-output "+$_.PrimarySmtpAddress)
 		}
-	[string]$xGroupName  = use-menu -MenuHash $xDistMenuHash -Title "Select a group" -NoSplash 1
+	[string]$xGroupPrimarySmtpAddress  = use-menu -MenuHash $xDistMenuHash -Title "Select a group" -NoSplash 1
 	#$xMember  = fUserPrompt -xQuestion "Who would you like to remove"
 	
 	$xDistMemMenuHash = New-Object System.Collections.HashTable
-	Get-DistributionGroupMember $xGroupName | sort-object Name | foreach-object {
+	Get-DistributionGroupMember $xGroupPrimarySmtpAddress | sort-object Name | foreach-object {
 			$xDistMemMenuHash.add($_.Name,"write-output "+$_.Name)
 		}
 	[string]$xMember  = use-menu -MenuHash $xDistMemMenuHash -Title "Select a Member" -NoSplash 1
 	
-	Remove-DistributionGroupMember $xGroupName -Member $xMember -BypassSecurityGroupManagerCheck
-	fListDistMembers -xGroupName $xGroupName
+	Remove-DistributionGroupMember $xGroupPrimarySmtpAddress -Member $xMember -BypassSecurityGroupManagerCheck -Confirm:$false
+	fListDistMembers -xGroupName $xGroupPrimarySmtpAddress
 	fStoreMainMenu -xRestore 1
 	pause
 }
@@ -1889,6 +1890,93 @@ Get-OrganizationConfig | Format-Table Name,OAuth* -Auto
 pause
 }
 
+function global:fAadrmSetup {
+	
+	
+	if ( 1 -eq 1 ){  # need to validate this is applicable
+		if ($xMFA -eq "0") {
+		#Connect to the Azure Rights Management service.
+		Get-Command -Module aadrm
+		Connect-AadrmService -Credential $O365Cred -ErrorAction stop
+		}
+		elseif ($xMFA -eq "1")
+		{
+		#Connect to the Azure Rights Management service. 
+		$cred = Get-Credential
+		Get-Command -Module aadrm
+		Connect-AadrmService
+		}
+
+		#Activate the service.
+		Enable-Aadrm
+
+		#Get the configuration information needed for message encryption.
+		$rmsConfig = Get-AadrmConfiguration
+		$licenseUri = $rmsConfig.LicensingIntranetDistributionPointUrl
+
+		#Collect IRM configuration for Office 365.
+		$irmConfig = Get-IRMConfiguration
+		$list = $irmConfig.LicensingLocation
+		if (!$list) { $list = @() }
+		if (!$list.Contains($licenseUri)) { $list += $licenseUri }
+
+		#Enable message encryption for Office 365.
+		Set-IRMConfiguration -LicensingLocation $list
+		Set-IRMConfiguration -AzureRMSLicensingEnabled $true -InternalLicensingEnabled $true
+
+		#Enable the Protect button in Outlook on the web (Optional).
+		Set-IRMConfiguration -SimplifiedClientAccessEnabled $true
+
+		#Enable decryption of attachments
+		Set-IRMConfiguration -DecryptAttachmentForEncryptOnly $true
+		
+		#Setup Transport Rules
+		
+		$autoencryptwords = "password", "Secure", "Encrypted", "Encrypt"
+		
+		$autoencrypttodomains = "domain.com"
+		
+		$excludeencryptwords = "DNE", "DoNotEncrypt", "Do Not Encrypt"
+		
+		# You can edit this and add Do Not Encrypt to the warning to prevent auto encryption when replying to inbound emails.
+		$warningbody = "<br/>
+		<table class=MsoNormalTable border=0 cellspacing=0 cellpadding=0 align=left width='100%' style='width:100.0%;mso-cellspacing:0cm;mso-yfti-tbllook:1184; mso-table-lspace:2.25pt;mso-table-rspace:2.25pt;mso-table-anchor-vertical:paragraph;mso-table-anchor-horizontal:column;mso-table-left:left;mso-padding-alt:0cm 0cm 0cm 0cm`'>
+			<tr style=`'mso-yfti-irow:0;mso-yfti-firstrow:yes;mso-yfti-lastrow:yes`'>
+				<td style=`'background:#910A19;padding:5.25pt 1.5pt 5.25pt 1.5pt`'></td>
+				<td width='100%' style=`'width:100.0%;background:#FDF2F4;padding:5.25pt 3.75pt 5.25pt 11.25pt; word-wrap:break-word`' cellpadding='7px 5px 7px 15px' color='#212121'>
+					<div>
+						<p class=MsoNormal style=`'mso-element:frame;mso-element-frame-hspace:2.25pt; mso-element-wrap:around;mso-element-anchor-vertical:paragraph;mso-element-anchor-horizontal: column;mso-height-rule:exactly`'>
+							<span style=`'font-size:9.0pt;font-family: 'Segoe UI',sans-serif;mso-fareast-font-family:'Times New Roman';color:#212121`'>
+								<b>Encryption Warning:</b> <br/>
+								The body/subject of this email may contain senstaive content. <br/>
+								Your replies will be encrypted unless you exclude this email.
+							</span>
+						</p>
+					</div>
+				</td>
+			</tr>
+		</table>
+		<br/>
+		 "
+		
+		New-TransportRule -Name "Encrypted Emails - Subject" -Priority 0 -ApplyRightsProtectionTemplate Encrypt -SenderAddressLocation Header -FromScope InOrganization -SubjectContainsWords $autoencryptwords -ExceptIfSubjectOrBodyContainsWords $excludeencryptwords -Enabled $true -Mode Enforce -RuleErrorAction Ignore
+
+		New-TransportRule -Name "Encrypted Emails - SubjectOrBody" -Priority 1 -ApplyRightsProtectionTemplate Encrypt -SenderAddressLocation Header -FromScope InOrganization -SubjectOrBodyContainsWords $autoencryptwords -ExceptIfSubjectOrBodyContainsWords $excludeencryptwords -Enabled $true -Mode Enforce -RuleErrorAction Ignore
+		
+		New-TransportRule -Name "Encrypted Emails - ToDomain" -Priority 2 -ApplyRightsProtectionTemplate Encrypt -SenderAddressLocation Header -FromScope InOrganization -RecipientDomainIs $autoencrypttodomains -ExceptIfSubjectOrBodyContainsWords $excludeencryptwords -Enabled $true -Mode Enforce -RuleErrorAction Ignore
+		
+		New-TransportRule -Name "Encrypted Emails - Warning" -Priority 3 -FromScope NotInOrganization -IfSubjectOrBodyContainsWords $autoencryptwords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $warningbody -ApplyHtmlDisclaimerFallbackAction ignore -ExceptIfSubjectOrBodyContainsWords $excludeencryptwords -Enabled $true -Mode Enforce -RuleErrorAction Ignore
+		
+	}
+	else
+	{
+	
+		fDisplayInfo -xText "Organisation is not licensed for AARMS" -xTime 15
+		
+	}
+}
+
+
 #Mail Flow and Spam =======================================================================================
 
 function global:fGetTranStatus {
@@ -1946,20 +2034,81 @@ function global:fSetSafelistEnable {
 
 }
 
-function global:fcreatewarningrules {
+function global:fCreateWarningRules {
 
 	fDisplayInfo -xText "Setting Warning Rules. Please review in Exchange Admin Centre after setup"
 	
-	$bodywords = "forms.office.com", "validate email", "office team", "verify email", "confirm your account", "office 365"
+	# $xSupportEmail should be set in user profile before the script loads, please see https://github.com/Demarcation/PowerShell-Office-365-Administration-Script 
+	if ( isset $xSupportEmail ) {
+		$SupportEmail = $xSupportEmail
+	} else {
+		$SupportEmail = "support@tetrabyte.com"
+	}
+	
+	
+	$bodywords = "validate email", "office team", "verify email", "confirm your account", "credit", "invoice", "refund", "365", "trusted source", "eFax", "microsoft", "forms.office.com", "confirm your account"
 
 	$headerwords = "onmicrosoft", "microsoft", "outlook"
 
-	$disclaimer = '<font color="red">***External Email***<br/> This message may or may not be legitimate, please treat links/attachments with caution, especially if they ask you to enter login credentials.<br/> If you have any doubts, please forward to support for verification.</font><br/> ---<br/><br/>'
+	$disclaimerbody = "<br/>
+	<table class=MsoNormalTable border=0 cellspacing=0 cellpadding=0 align=left width='100%' style='width:100.0%;mso-cellspacing:0cm;mso-yfti-tbllook:1184; mso-table-lspace:2.25pt;mso-table-rspace:2.25pt;mso-table-anchor-vertical:paragraph;mso-table-anchor-horizontal:column;mso-table-left:left;mso-padding-alt:0cm 0cm 0cm 0cm`'>
+		<tr style=`'mso-yfti-irow:0;mso-yfti-firstrow:yes;mso-yfti-lastrow:yes`'>
+			<td style=`'background:#910A19;padding:5.25pt 1.5pt 5.25pt 1.5pt`'></td>
+			<td width='100%' style=`'width:100.0%;background:#FDF2F4;padding:5.25pt 3.75pt 5.25pt 11.25pt; word-wrap:break-word`' cellpadding='7px 5px 7px 15px' color='#212121'>
+				<div>
+					<p class=MsoNormal style=`'mso-element:frame;mso-element-frame-hspace:2.25pt; mso-element-wrap:around;mso-element-anchor-vertical:paragraph;mso-element-anchor-horizontal: column;mso-height-rule:exactly`'>
+						<span style=`'font-size:9.0pt;font-family: 'Segoe UI',sans-serif;mso-fareast-font-family:'Times New Roman';color:#212121`'>
+							<b>External Email:</b> <br/>
+							The body/subject of this email contains keywords that are often used to trick users. <br/>
+							This message may not be legitimate, please treat links/attachments with caution, especially if they ask you to enter login credentials.<br/>
+							If you have any doubts, please forward to ".$SupportEmail." for verification.
+							<o:p>
+							</o:p>
+						</span>
+					</p>
+				</div>
+			</td>
+		</tr>
+	</table>
+	<br/>
+	 "
 
-	new-transportrule -Name "External Warning - Body" -FromScope NotInOrganization -SubjectOrBodyContainsWords $bodywords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimer -ApplyHtmlDisclaimerFallbackAction wrap 
 
-	new-transportrule -Name "External Warning - Header" -FromScope NotInOrganization -HeaderContainsMessageHeader from -HeaderContainsWords $headerwords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimer -ApplyHtmlDisclaimerFallbackAction wrap
+	$disclaimerheader = "<br/>
+	<table class=MsoNormalTable border=0 cellspacing=0 cellpadding=0 align=left width='100%' style='width:100.0%;mso-cellspacing:0cm;mso-yfti-tbllook:1184; mso-table-lspace:2.25pt;mso-table-rspace:2.25pt;mso-table-anchor-vertical:paragraph;mso-table-anchor-horizontal:column;mso-table-left:left;mso-padding-alt:0cm 0cm 0cm 0cm`'>
+		<tr style=`'mso-yfti-irow:0;mso-yfti-firstrow:yes;mso-yfti-lastrow:yes`'>
+			<td style=`'background:#910A19;padding:5.25pt 1.5pt 5.25pt 1.5pt`'></td>
+			<td width='100%' style=`'width:100.0%;background:#FDF2F4;padding:5.25pt 3.75pt 5.25pt 11.25pt; word-wrap:break-word`' cellpadding='7px 5px 7px 15px' color='#212121'>
+				<div>
+					<p class=MsoNormal style=`'mso-element:frame;mso-element-frame-hspace:2.25pt; mso-element-wrap:around;mso-element-anchor-vertical:paragraph;mso-element-anchor-horizontal: column;mso-height-rule:exactly`'>
+						<span style=`'font-size:9.0pt;font-family: 'Segoe UI',sans-serif;mso-fareast-font-family:'Times New Roman';color:#212121`'>
+							<b>External Email:</b> <br/>
+							The sender address of this email contains keywords that are often used to trick users. <br/>
+							This message may not be legitimate, please treat links/attachments with caution, especially if they ask you to enter login credentials.<br/>
+							If you have any doubts, please forward to ".$SupportEmail." for verification.
+							<o:p>
+							</o:p>
+						</span>
+					</p>
+				</div>
+			</td>
+		</tr>
+	</table>
+	<br/>
+	 "
 
+	if (Get-TransportRule "External Warning - Body") {
+		set-transportrule -identity "External Warning - Body" -FromScope NotInOrganization -SubjectOrBodyContainsWords $bodywords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimerbody -ApplyHtmlDisclaimerFallbackAction wrap 
+	} else { 
+		new-transportrule -Name "External Warning - Body" -FromScope NotInOrganization -SubjectOrBodyContainsWords $bodywords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimerbody -ApplyHtmlDisclaimerFallbackAction wrap 
+	}
+	
+	if (Get-TransportRule "External Warning - Header") {
+		set-transportrule -idenitity "External Warning - Header" -FromScope NotInOrganization -HeaderContainsMessageHeader from -HeaderContainsWords $headerwords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimerheader -ApplyHtmlDisclaimerFallbackAction wrap
+	} else {
+		new-transportrule -Name "External Warning - Header" -FromScope NotInOrganization -HeaderContainsMessageHeader from -HeaderContainsWords $headerwords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimerheader -ApplyHtmlDisclaimerFallbackAction wrap
+	}
+	
 	fGetTranStatus
 
 }
@@ -2013,8 +2162,6 @@ $xInput = foreach ($ten in $tenids) {get-msoluser -tenantid $ten | ?{$_.licenses
 	fExportTXT -xInput $xInput -xFilename "UserList"
 
 }
-
-
 
 
 
