@@ -2039,7 +2039,7 @@ function global:fCreateWarningRules {
 	fDisplayInfo -xText "Setting Warning Rules. Please review in Exchange Admin Centre after setup"
 	
 	# $xSupportEmail should be set in user profile before the script loads, please see https://github.com/Demarcation/PowerShell-Office-365-Administration-Script 
-	if ( isset $xSupportEmail ) {
+	if ( $xSupportEmail ) {
 		$SupportEmail = $xSupportEmail
 	} else {
 		$SupportEmail = "support@tetrabyte.com"
