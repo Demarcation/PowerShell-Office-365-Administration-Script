@@ -1,5 +1,5 @@
 		<######################################################################
-		365 Powershell Administration System 
+		365 Powershell Administration System
 		Copyright (C) 2019  Ashley Unwin, www.AshleyUnwin.com/powershell
 		
 		It is requested that you leave this notice in place when using the
@@ -20,7 +20,8 @@
 		
 		- BUG STATUS-UNKNOWN: fEditUserAccountName might not change the name of the mailbox itself
 		
-		- FEATURE-COMPLETE: List all mailboxes a user has access to - get-mailboxpermission * -resultsize unlimited | ?{$_.user -match $xImput} | select Idenitity, AccessRights
+		- FEATURE-COMPLETE: List all mailboxes a user has access to - get-mailboxpermission * -resultsize unlimited | ?{$_.user -match $xImput} | select 
+		, AccessRights
 
 		- FEATURE-REQUEST: Rename Account/email
 		- FEATURE-REQUEST: Remove Account
@@ -2104,7 +2105,7 @@ function global:fCreateWarningRules {
 	}
 	
 	if (Get-TransportRule "External Warning - Header") {
-		set-transportrule -idenitity "External Warning - Header" -FromScope NotInOrganization -HeaderContainsMessageHeader from -HeaderContainsWords $headerwords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimerheader -ApplyHtmlDisclaimerFallbackAction wrap
+		set-transportrule -identity "External Warning - Header" -FromScope NotInOrganization -HeaderContainsMessageHeader from -HeaderContainsWords $headerwords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimerheader -ApplyHtmlDisclaimerFallbackAction wrap
 	} else {
 		new-transportrule -Name "External Warning - Header" -FromScope NotInOrganization -HeaderContainsMessageHeader from -HeaderContainsWords $headerwords -ApplyHtmlDisclaimerLocation Prepend -ApplyHtmlDisclaimerText $disclaimerheader -ApplyHtmlDisclaimerFallbackAction wrap
 	}
