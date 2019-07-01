@@ -16,6 +16,7 @@ Else, if you already have 'executionpolicy unrestricted' set, you can run 'Invok
 
 ###
     $global:xCompanyFilePath = "Z:\~Tools\Powershell\companys.csv" #Allow central company.csv file for multi users
+    $global:xSupportEmail = "support@domain.com"
     $xPath = "C:\Powershell\365Login.ps1" # Adjust this for the location of the file
     import-module $xPath
     Write-host "365 Module Imported"
